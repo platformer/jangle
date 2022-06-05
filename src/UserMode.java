@@ -6,8 +6,6 @@ import java.net.Socket;
 import java.util.Arrays;
 import java.util.List;
 
-import javax.imageio.plugins.tiff.ExifTIFFTagSet;
-
 import com.googlecode.lanterna.TerminalSize;
 import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.graphics.SimpleTheme;
