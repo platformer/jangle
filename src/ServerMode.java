@@ -59,8 +59,7 @@ public class ServerMode {
             } else if (activeUsers.contains(user)) {
                 try {
                     s.close();
-                } catch (IOException ioe) {
-                }
+                } catch (IOException ioe) {}
                 continue;
             }
 

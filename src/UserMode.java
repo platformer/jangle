@@ -6,6 +6,8 @@ import java.net.Socket;
 import java.util.Arrays;
 import java.util.List;
 
+import javax.imageio.plugins.tiff.ExifTIFFTagSet;
+
 import com.googlecode.lanterna.TerminalSize;
 import com.googlecode.lanterna.TextColor;
 import com.googlecode.lanterna.graphics.SimpleTheme;
@@ -34,6 +36,16 @@ public class UserMode {
 
         out.println(username);
         out.flush();
+
+        if (out.checkError()){
+            try {
+                out.close();
+                s.close();
+            }
+            catch (IOException ioe){}
+            
+            return;
+        }
 
         try {
             Screen screen = new DefaultTerminalFactory().createScreen();
