@@ -1,4 +1,5 @@
 import java.io.BufferedReader;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.InetAddress;
@@ -24,15 +25,15 @@ public class ServerMode {
         activeUsers = new HashSet<>();
         inactiveUsers = new HashSet<>();
         try (ServerSocket ss = new ServerSocket(port);
-                PrintWriter upw = new PrintWriter("jangle_userlog.txt");
-                PrintWriter cpw = new PrintWriter("jangle_chatlog.txt");) {
+                PrintWriter upw = new PrintWriter(new FileOutputStream("jangle_server.log"), true);
+                PrintWriter cpw = new PrintWriter(new FileOutputStream("jangle_chat.log"), true);) {
             serverSocket = ss;
             serverLog = upw;
             chatLog = cpw;
             pool = new ThreadPoolExecutor(2, 100, 1, TimeUnit.HOURS, new LinkedBlockingQueue<>());
             run();
         } catch (IOException ioe) {
-            System.out.println("ERROR: could not establish server");
+            System.err.println("ERROR: could not establish server");
         } catch (InterruptedException ie) {
             pool.shutdownNow();
         }
@@ -59,6 +60,8 @@ public class ServerMode {
             } else if (activeUsers.contains(user)) {
                 try {
                     s.close();
+                    serverLog.println(
+                        new Date() + ": Closing duplicate connection from " + ip.toString() + " port " + s.getPort());
                 } catch (IOException ioe) {}
                 continue;
             }
@@ -111,7 +114,6 @@ public class ServerMode {
         for (UserHandle user : activeUsers) {
             PrintWriter out = user.getPrintWriter();
             out.println(signedMsg);
-            out.flush();
         }
     }
 }

@@ -23,7 +23,7 @@ public class UserHandle {
         this.socket = socket;
         try {
             this.serverIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            this.serverOut = new PrintWriter(socket.getOutputStream());
+            this.serverOut = new PrintWriter(socket.getOutputStream(), true);
         } catch (IOException ioe) {
             serverLog.println(new Date() + ": Failed to create streams for user " + id);
         }
@@ -32,7 +32,7 @@ public class UserHandle {
     @Override
     public boolean equals(Object o) {
         if (o instanceof UserHandle) {
-            return ((UserHandle) o).ip == this.ip;
+            return ((UserHandle) o).ip.equals(this.ip);
         }
         return false;
     }

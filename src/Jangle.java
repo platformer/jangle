@@ -1,7 +1,7 @@
 public class Jangle {
     public static void main(String[] args) {
         if (args.length == 0) {
-            System.out.println("ERROR: missing arguments");
+            System.err.println("ERROR: missing arguments");
             printHelp();
         }
         else if (args[0].equals("help") || args[0].equals("-h") || args[0].equals("--help")) {
@@ -9,7 +9,7 @@ public class Jangle {
         }
         else if (args[0].equals("server")) {
             if (args.length != 2) {
-                System.out.println("ERROR: wrong number of arguments");
+                System.err.println("ERROR: wrong number of arguments");
                 printHelp();
                 return;
             }
@@ -19,7 +19,7 @@ public class Jangle {
                 port = Integer.parseInt(args[1]);
             }
             catch (NumberFormatException nfe) {
-                System.out.println("ERROR: could not resolve " + args[1] + " to a port number");
+                System.err.println("ERROR: could not resolve " + args[1] + " to a port number");
                 return;
             }
 
@@ -27,7 +27,7 @@ public class Jangle {
         }
         else if (args[0].equals("chat")) {
             if (args.length != 4) {
-                System.out.println("ERROR: wrong number of arguments");
+                System.err.println("ERROR: wrong number of arguments");
                 printHelp();
                 return;
             }
@@ -38,7 +38,7 @@ public class Jangle {
                 port = Integer.parseInt(args[2]);
             }
             catch (NumberFormatException nfe) {
-                System.out.println("ERROR: could not resolve " + args[2] + " to a port number");
+                System.err.println("ERROR: could not resolve " + args[2] + " to a port number");
                 return;
             }
 
@@ -47,7 +47,7 @@ public class Jangle {
             UserMode.startChat(host, port, username);
         }
         else {
-            System.out.println("ERROR: " + args[0] + " is not a command");
+            System.err.println("ERROR: " + args[0] + " is not a command");
             printHelp();
         }
     }
