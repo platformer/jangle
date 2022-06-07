@@ -30,3 +30,8 @@ bin/
 
 ### Miscellaneous ###
 test/
+
+### Skip output jar ###
+!target/
+target/*
+!target/*.jar

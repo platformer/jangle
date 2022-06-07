@@ -1,3 +1,5 @@
+package jangle;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -97,7 +99,7 @@ public class UserMode {
             baseWindow.setComponent(mainPanel);
             writeBox.takeFocus();
 
-            Thread receiveThread = new Thread(() -> receive(s, readBox));
+            Thread receiveThread = new Thread(() -> listen(s, readBox));
             receiveThread.start();
             textGUI.addWindowAndWait(baseWindow);
             receiveThread.interrupt();
@@ -110,7 +112,7 @@ public class UserMode {
         } catch (IOException e) {}
     }
 
-    private static void receive(Socket s, TextBox readBox) {
+    private static void listen(Socket s, TextBox readBox) {
         try (
                 BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));) {
             while (true) {
