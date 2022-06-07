@@ -6,8 +6,8 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -22,8 +22,8 @@ public class ServerMode {
     private static ExecutorService pool;
 
     public static void startServer(int port) {
-        activeUsers = new HashSet<>();
-        inactiveUsers = new HashSet<>();
+        activeUsers = ConcurrentHashMap.newKeySet(100);
+        inactiveUsers = ConcurrentHashMap.newKeySet(100);
         try (ServerSocket ss = new ServerSocket(port);
                 PrintWriter upw = new PrintWriter(new FileOutputStream("jangle_server.log"), true);
                 PrintWriter cpw = new PrintWriter(new FileOutputStream("jangle_chat.log"), true);) {
