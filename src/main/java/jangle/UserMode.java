@@ -39,15 +39,6 @@ public class UserMode {
 
         out.println(username);
 
-        // if (out.checkError()) {
-        //     try {
-        //         out.close();
-        //         s.close();
-        //     } catch (IOException ioe) {}
-
-        //     return;
-        // }
-
         try {
             s.setSoTimeout(1000);
             if (s.getInputStream().read() == -1){
@@ -82,7 +73,7 @@ public class UserMode {
             Panel mainPanel = new Panel(new GridLayout(1));
 
             mainPanel.addComponent(
-                    new TextBox(new TerminalSize(1, 1), TextBox.Style.MULTI_LINE),
+                    new ChatWindowTextBox(new TerminalSize(1, 1), TextBox.Style.MULTI_LINE),
                     GridLayout.createLayoutData(
                             GridLayout.Alignment.FILL, GridLayout.Alignment.FILL, true, true, 50, 15));
             mainPanel.addComponent(
@@ -91,15 +82,15 @@ public class UserMode {
                             GridLayout.Alignment.FILL, GridLayout.Alignment.FILL, true, false, 50, 3));
 
             List<Component> panelComponents = mainPanel.getChildrenList();
-            TextBox readBox = (TextBox) panelComponents.get(0);
-            TextBox writeBox = (TextBox) panelComponents.get(1);
+            ChatWindowTextBox readBox = (ChatWindowTextBox) panelComponents.get(0);
+            MessageEditorTextBox writeBox = (MessageEditorTextBox) panelComponents.get(1);
 
             readBox.setReadOnly(true);
 
             baseWindow.setComponent(mainPanel);
             writeBox.takeFocus();
 
-            Thread receiveThread = new Thread(() -> listen(s, readBox));
+            Thread receiveThread = new Thread(() -> listen(s, readBox, writeBox));
             receiveThread.start();
             textGUI.addWindowAndWait(baseWindow);
             receiveThread.interrupt();
@@ -112,12 +103,13 @@ public class UserMode {
         } catch (IOException e) {}
     }
 
-    private static void listen(Socket s, TextBox readBox) {
-        try (
-                BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()));) {
+    private static void listen(Socket s, ChatWindowTextBox readBox, MessageEditorTextBox writeBox) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
             while (true) {
                 String incomingMsg = in.readLine();
-                readBox.addLine(incomingMsg);
+                TextBox focusedBox = readBox.isFocused()? readBox : writeBox;
+                readBox.addLineAndScrollDown(incomingMsg);
+                focusedBox.takeFocus();
             }
         } catch (IOException ioe) {
             System.err.println("ERROR: could not open input stream - closing connection");

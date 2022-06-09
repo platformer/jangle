@@ -26,7 +26,7 @@ public class ServerMode {
     public static void startServer(int port) {
         activeUsers = ConcurrentHashMap.newKeySet(100);
         inactiveUsers = ConcurrentHashMap.newKeySet(100);
-        try (ServerSocket ss = new ServerSocket(port);
+        try (   ServerSocket ss = new ServerSocket(port);
                 PrintWriter upw = new PrintWriter(new FileOutputStream("jangle_server.log"), true);
                 PrintWriter cpw = new PrintWriter(new FileOutputStream("jangle_chat.log"), true);) {
             serverSocket = ss;
@@ -103,7 +103,7 @@ public class ServerMode {
                     return;
                 }
 
-                String signedMsg = "\n" + username + "\n" + msg;
+                String signedMsg = username + "\n" + msg + "\n";
                 chatLog.println(signedMsg);
                 pool.execute(() -> disseminate(signedMsg));
             } catch (IOException e) {

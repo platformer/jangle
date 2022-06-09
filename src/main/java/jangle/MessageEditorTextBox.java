@@ -23,8 +23,11 @@ public class MessageEditorTextBox extends TextBox {
     @Override
     public Result handleKeyStroke(KeyStroke keyStroke) {
         if (keyStroke.getKeyType() == KeyType.Enter){
-            String timestampedMsg = dateFormat.format(new Date()) + " | " + getText();
-            out.println(timestampedMsg);
+            if (!getText().equals("")){
+                String timestampedMsg = dateFormat.format(new Date()) + " | " + getText();
+                out.println(timestampedMsg);
+            }
+
             setText("");
             takeFocus();
 

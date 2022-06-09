@@ -1,7 +1,9 @@
 package jangle;
 
-public class App 
+public class App
 {
+    final static int DEFAULT_PORT_NUMBER = 52042;
+
     public static void main(String[] args) {
         if (args.length == 0) {
             System.err.println("ERROR: missing arguments");
@@ -11,43 +13,25 @@ public class App
             printHelp();
         }
         else if (args[0].equals("server")) {
-            if (args.length != 2) {
+            if (args.length != 1) {
                 System.err.println("ERROR: wrong number of arguments");
                 printHelp();
                 return;
             }
 
-            int port;
-            try {
-                port = Integer.parseInt(args[1]);
-            }
-            catch (NumberFormatException nfe) {
-                System.err.println("ERROR: could not resolve " + args[1] + " to a port number");
-                return;
-            }
-
-            ServerMode.startServer(port);
+            ServerMode.startServer(DEFAULT_PORT_NUMBER);
         }
         else if (args[0].equals("chat")) {
-            if (args.length != 4) {
+            if (args.length != 3) {
                 System.err.println("ERROR: wrong number of arguments");
                 printHelp();
                 return;
             }
 
             String host = args[1];
-            int port;
-            try {
-                port = Integer.parseInt(args[2]);
-            }
-            catch (NumberFormatException nfe) {
-                System.err.println("ERROR: could not resolve " + args[2] + " to a port number");
-                return;
-            }
+            String username = args[2];
 
-            String username = args[3];
-
-            UserMode.startChat(host, port, username);
+            UserMode.startChat(host, DEFAULT_PORT_NUMBER, username);
         }
         else {
             System.err.println("ERROR: " + args[0] + " is not a command");
@@ -57,9 +41,9 @@ public class App
 
     // prints help message
     private static void printHelp() {
-        System.out.println("Valid commands:");
-        System.out.println("\tserver <port number>                    (open a server on <port number>)");
-        System.out.println("\tchat <hostname> <port number> <name>    (connect to server at <hostname>, port <port number>, with name <name>)");
-        System.out.println("\t-h | --help | help                      (print help message)");
+        System.out.println("Valid Commands:");
+        System.out.println("server                        (start a server)");
+        System.out.println("chat <hostname> <name>        (connect to server at <hostname> with username <name>)");
+        System.out.println("-h | --help | help            (print help message)");
     }
 }
