@@ -16,32 +16,36 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class ServerMode {
-    private static Set<UserHandle> activeUsers;
-    private static Set<UserHandle> inactiveUsers;
-    private static ServerSocket serverSocket;
-    private static PrintWriter serverLog;
-    private static PrintWriter chatLog;
-    private static ExecutorService pool;
+    private static final String SERVER_LOG_FILENAME = "jangle_server.log";
+    private static final String CHAT_lOG_FILENAME = "jangle_chat.log";
 
     public static void startServer(int port) {
-        activeUsers = ConcurrentHashMap.newKeySet(100);
-        inactiveUsers = ConcurrentHashMap.newKeySet(100);
-        try (   ServerSocket ss = new ServerSocket(port);
-                PrintWriter upw = new PrintWriter(new FileOutputStream("jangle_server.log"), true);
-                PrintWriter cpw = new PrintWriter(new FileOutputStream("jangle_chat.log"), true);) {
-            serverSocket = ss;
-            serverLog = upw;
-            chatLog = cpw;
-            pool = new ThreadPoolExecutor(2, 100, 1, TimeUnit.HOURS, new LinkedBlockingQueue<>());
-            run();
+        ExecutorService pool = new ThreadPoolExecutor(2, 100, 1, TimeUnit.HOURS, new LinkedBlockingQueue<>());
+        Set<UserHandle> activeUsers = ConcurrentHashMap.newKeySet(100);
+        Set<UserHandle> inactiveUsers = ConcurrentHashMap.newKeySet(100);
+
+        try (   
+                ServerSocket ss = new ServerSocket(port);
+                PrintWriter upw = new PrintWriter(new FileOutputStream(SERVER_LOG_FILENAME), true);
+                PrintWriter cpw = new PrintWriter(new FileOutputStream(CHAT_lOG_FILENAME), true);
+            ){
+            ServerSocket serverSocket = ss;
+            PrintWriter serverLog = upw;
+            PrintWriter chatLog = cpw;
+            run(pool, activeUsers, inactiveUsers, serverSocket, serverLog, chatLog);
         } catch (IOException ioe) {
             System.err.println("ERROR: could not establish server");
-        } catch (InterruptedException ie) {
+        } finally {
             pool.shutdownNow();
         }
     }
 
-    private static void run() throws InterruptedException {
+    private static void run(
+        ExecutorService pool,
+        Set<UserHandle> activeUsers, Set<UserHandle> inactiveUsers,
+        ServerSocket serverSocket,
+        PrintWriter serverLog, PrintWriter chatlog
+    ) {
         while (true) {
             Socket s;
             try {
@@ -67,6 +71,9 @@ public class ServerMode {
                 } catch (IOException ioe) {}
                 continue;
             }
+            else {
+                serverLog.println(new Date() + "User from " + ip.toString() + "is new - id set to " + user.getID());
+            }
 
             user.activate(s, serverLog);
             activeUsers.add(user);
@@ -77,17 +84,23 @@ public class ServerMode {
                 serverLog.println(new Date() + ": Could not update name for user " + user.getID());
             }
 
-            pool.execute(() -> listen(user));
+            pool.execute(() -> listen(user, pool, activeUsers, inactiveUsers, serverLog, chatlog));
         }
     }
 
-    private static void listen(UserHandle user) {
+    private static void listen(
+        UserHandle user,
+        ExecutorService pool,
+        Set<UserHandle> activeUsers, Set<UserHandle> inactiveUsers,
+        PrintWriter serverLog, PrintWriter chatLog
+    ) {
         String username = user.getName() + " #" + user.getID();
         BufferedReader in = user.getBufferedReader();
 
         while (true) {
             try {
                 String msg = in.readLine();
+                serverLog.println(new Date() + "Received message from user " + user.getID());
 
                 // if msg is null, other user has disconnected
                 if (msg == null) {
@@ -105,14 +118,14 @@ public class ServerMode {
 
                 String signedMsg = username + "\n" + msg + "\n";
                 chatLog.println(signedMsg);
-                pool.execute(() -> disseminate(signedMsg));
+                pool.execute(() -> disseminate(signedMsg, activeUsers));
             } catch (IOException e) {
                 serverLog.println(new Date() + ": ERROR: could not read message from user " + user.getID());
             }
         }
     }
 
-    private static void disseminate(String signedMsg) {
+    private static void disseminate(String signedMsg, Set<UserHandle> activeUsers) {
         for (UserHandle user : activeUsers) {
             PrintWriter out = user.getPrintWriter();
             out.println(signedMsg);

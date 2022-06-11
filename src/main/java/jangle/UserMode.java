@@ -25,6 +25,7 @@ public class UserMode {
     public static void startChat(String host, int port, String username) {
         Socket s;
         PrintWriter out;
+
         try {
             s = new Socket(host, port);
             out = new PrintWriter(s.getOutputStream(), true);
@@ -34,13 +35,13 @@ public class UserMode {
         }
 
         try {
-            Thread.sleep(1000);
+            Thread.sleep(500);
         } catch (InterruptedException e1) {}
 
         out.println(username);
 
         try {
-            s.setSoTimeout(1000);
+            s.setSoTimeout(500);
             if (s.getInputStream().read() == -1){
                 s.close();
                 System.err.println("ERROR: disconnected from server - are you already connected to this server?");
@@ -52,7 +53,7 @@ public class UserMode {
             try {
                 s.setSoTimeout(0);
             }
-            catch (IOException ioe2){}
+            catch (IOException ioe){}
         }
 
         try {
@@ -62,24 +63,31 @@ public class UserMode {
             MultiWindowTextGUI textGUI = new MultiWindowTextGUI(screen);
             Window baseWindow = new BasicWindow();
             baseWindow.setHints(
-                    Arrays.asList(
-                            Window.Hint.CENTERED,
-                            Window.Hint.FULL_SCREEN,
-                            Window.Hint.MODAL,
-                            Window.Hint.NO_DECORATIONS,
-                            Window.Hint.NO_POST_RENDERING));
+                Arrays.asList(
+                    Window.Hint.CENTERED,
+                    Window.Hint.FULL_SCREEN,
+                    Window.Hint.MODAL,
+                    Window.Hint.NO_DECORATIONS,
+                    Window.Hint.NO_POST_RENDERING
+                )
+            );
             baseWindow.setTheme(new SimpleTheme(TextColor.ANSI.DEFAULT, TextColor.ANSI.DEFAULT));
 
             Panel mainPanel = new Panel(new GridLayout(1));
 
             mainPanel.addComponent(
-                    new ChatWindowTextBox(new TerminalSize(1, 1), TextBox.Style.MULTI_LINE),
-                    GridLayout.createLayoutData(
-                            GridLayout.Alignment.FILL, GridLayout.Alignment.FILL, true, true, 50, 15));
+                new ChatWindowTextBox(new TerminalSize(1, 1), TextBox.Style.MULTI_LINE),
+                GridLayout.createLayoutData(
+                    GridLayout.Alignment.FILL, GridLayout.Alignment.FILL, true, true, 50, 15
+                )
+            );
+            
             mainPanel.addComponent(
-                    new MessageEditorTextBox(username, out, new TerminalSize(1, 2), TextBox.Style.SINGLE_LINE),
-                    GridLayout.createLayoutData(
-                            GridLayout.Alignment.FILL, GridLayout.Alignment.FILL, true, false, 50, 3));
+                new MessageEditorTextBox(username, out, new TerminalSize(1, 2), TextBox.Style.SINGLE_LINE),
+                GridLayout.createLayoutData(
+                    GridLayout.Alignment.FILL, GridLayout.Alignment.FILL, true, false, 50, 3
+                )
+            );
 
             List<Component> panelComponents = mainPanel.getChildrenList();
             ChatWindowTextBox readBox = (ChatWindowTextBox) panelComponents.get(0);
