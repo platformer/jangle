@@ -1,8 +1,7 @@
 package jangle;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.Socket;
@@ -13,8 +12,8 @@ public class UserHandle {
     private final InetAddress ip;
     private String name;
     private Socket socket;
-    BufferedReader serverIn;
-    PrintWriter serverOut;
+    private ObjectInputStream serverIn;
+    private PrintWriter serverOut;
 
     public UserHandle(InetAddress ip) {
         this.ip = ip;
@@ -24,11 +23,20 @@ public class UserHandle {
     public void activate(Socket socket, PrintWriter serverLog) {
         this.socket = socket;
         try {
-            this.serverIn = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            this.serverIn = new ObjectInputStream(socket.getInputStream());
             this.serverOut = new PrintWriter(socket.getOutputStream(), true);
         } catch (IOException ioe) {
             serverLog.println(new Date() + ": Failed to create streams for user " + id);
         }
+    }
+
+    public void deactivate(){
+        try {
+            serverOut.close();
+            serverIn.close();
+            socket.close();
+        }
+        catch (IOException ioe){}
     }
 
     @Override
@@ -64,7 +72,7 @@ public class UserHandle {
         return socket;
     }
 
-    public BufferedReader getBufferedReader() {
+    public ObjectInputStream getObjectInputStream() {
         return serverIn;
     }
 

@@ -3,7 +3,7 @@ package jangle;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.Arrays;
 import java.util.List;
@@ -21,27 +21,23 @@ import com.googlecode.lanterna.gui2.Window;
 import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 
+import jangle.UserMessage.MessageType;
+
 public class UserMode {
     public static void startChat(String host, int port, String username) {
         Socket s;
-        PrintWriter out;
-
+        ObjectOutputStream out;
+        
         try {
             s = new Socket(host, port);
-            out = new PrintWriter(s.getOutputStream(), true);
+            out = new ObjectOutputStream(s.getOutputStream());
         } catch (IOException ioe) {
             System.err.println("ERROR: could not connect to server at " + host);
             return;
         }
 
         try {
-            Thread.sleep(500);
-        } catch (InterruptedException e1) {}
-
-        out.println(username);
-
-        try {
-            s.setSoTimeout(500);
+            s.setSoTimeout(1000);
             if (s.getInputStream().read() == -1){
                 s.close();
                 System.err.println("ERROR: disconnected from server - are you already connected to this server?");
@@ -49,11 +45,23 @@ public class UserMode {
             }
         }
         catch (IOException ioe){}
-        finally {
-            try {
-                s.setSoTimeout(0);
-            }
-            catch (IOException ioe){}
+
+        try {
+            s.setSoTimeout(0);
+        }
+        catch (IOException ioe){
+            System.err.println("ERROR: disconnected from server");
+            return;
+        }
+
+        try {
+            UserMessage usernameMsg = new UserMessage(MessageType.Username, username);
+            out.writeObject(usernameMsg);
+            out.flush();
+        }
+        catch (IOException ioe){
+            System.err.println("ERROR: could not complete handshake with server at " + host);
+            return;
         }
 
         try {
@@ -81,7 +89,7 @@ public class UserMode {
                     GridLayout.Alignment.FILL, GridLayout.Alignment.FILL, true, true, 50, 15
                 )
             );
-            
+
             mainPanel.addComponent(
                 new MessageEditorTextBox(username, out, new TerminalSize(1, 2), TextBox.Style.SINGLE_LINE),
                 GridLayout.createLayoutData(
@@ -93,12 +101,10 @@ public class UserMode {
             ChatWindowTextBox readBox = (ChatWindowTextBox) panelComponents.get(0);
             MessageEditorTextBox writeBox = (MessageEditorTextBox) panelComponents.get(1);
 
-            readBox.setReadOnly(true);
-
             baseWindow.setComponent(mainPanel);
             writeBox.takeFocus();
 
-            Thread receiveThread = new Thread(() -> listen(s, readBox, writeBox));
+            Thread receiveThread = new Thread(() -> listen(s, readBox));
             receiveThread.start();
             textGUI.addWindowAndWait(baseWindow);
             receiveThread.interrupt();
@@ -111,13 +117,16 @@ public class UserMode {
         } catch (IOException e) {}
     }
 
-    private static void listen(Socket s, ChatWindowTextBox readBox, MessageEditorTextBox writeBox) {
+    private static void listen(Socket s, ChatWindowTextBox readBox) {
         try (BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
             while (true) {
                 String incomingMsg = in.readLine();
-                TextBox focusedBox = readBox.isFocused()? readBox : writeBox;
-                readBox.addLineAndScrollDown(incomingMsg);
-                focusedBox.takeFocus();
+                if (readBox.getCaretPosition().getRow() > readBox.getLineCount() - readBox.getSize().getRows()) {
+                    readBox.addLineAndScrollDown(incomingMsg);
+                }
+                else {
+                    readBox.addLine(incomingMsg);
+                }
             }
         } catch (IOException ioe) {
             System.err.println("ERROR: could not open input stream - closing connection");
