@@ -1,12 +1,16 @@
 package jangle;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
+
+import org.javatuples.Quartet;
 
 import com.googlecode.lanterna.TerminalSize;
 import com.googlecode.lanterna.TextColor;
@@ -21,46 +25,50 @@ import com.googlecode.lanterna.gui2.Window;
 import com.googlecode.lanterna.screen.Screen;
 import com.googlecode.lanterna.terminal.DefaultTerminalFactory;
 
-import jangle.UserMessage.MessageType;
-
 public class UserMode {
     public static void startChat(String host, int port, String username) {
         Socket s;
         ObjectOutputStream out;
+        ObjectInputStream in;
         
         try {
             s = new Socket(host, port);
             out = new ObjectOutputStream(s.getOutputStream());
+            in = new ObjectInputStream(s.getInputStream());
         } catch (IOException ioe) {
             System.err.println("ERROR: could not connect to server at " + host);
             return;
         }
 
         try {
-            s.setSoTimeout(1000);
-            if (s.getInputStream().read() == -1){
+            ServerMessage rejectMessage = (ServerMessage) in.readObject();
+            if (rejectMessage.getType() == ServerMessage.ServerMessageType.DisconnectDuplicate
+                && (Boolean) rejectMessage.getPayload()) {
+                in.close();
+                out.close();
                 s.close();
                 System.err.println("ERROR: disconnected from server - are you already connected to this server?");
                 return;
             }
         }
-        catch (IOException ioe){}
-
-        try {
-            s.setSoTimeout(0);
-        }
-        catch (IOException ioe){
+        catch (IOException | ClassNotFoundException e){
             System.err.println("ERROR: disconnected from server");
             return;
         }
 
         try {
-            UserMessage usernameMsg = new UserMessage(MessageType.Username, username);
+            UserMessage usernameMsg = new UserMessage(UserMessage.UserMessageType.Username, username);
             out.writeObject(usernameMsg);
             out.flush();
         }
         catch (IOException ioe){
             System.err.println("ERROR: could not complete handshake with server at " + host);
+            try {
+                in.close();
+                out.close();
+                s.close();
+            }
+            catch (IOException ioe2){}
             return;
         }
 
@@ -104,32 +112,58 @@ public class UserMode {
             baseWindow.setComponent(mainPanel);
             writeBox.takeFocus();
 
-            Thread receiveThread = new Thread(() -> listen(s, readBox));
+            Thread receiveThread = new Thread(() -> listen(in, readBox, screen));
             receiveThread.start();
             textGUI.addWindowAndWait(baseWindow);
             receiveThread.interrupt();
         } catch (IOException ioe) {
             System.err.println("ERROR: Failed to start application");
+        } finally {
+            try {
+                in.close();
+                out.close();
+                s.close();
+            } catch (IOException e) {}
         }
-
-        try {
-            s.close();
-        } catch (IOException e) {}
     }
 
-    private static void listen(Socket s, ChatWindowTextBox readBox) {
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
-            while (true) {
-                String incomingMsg = in.readLine();
-                if (readBox.getCaretPosition().getRow() > readBox.getLineCount() - readBox.getSize().getRows()) {
-                    readBox.addLineAndScrollDown(incomingMsg);
-                }
-                else {
-                    readBox.addLine(incomingMsg);
-                }
+    @SuppressWarnings("unchecked")
+    private static void listen(ObjectInputStream in, ChatWindowTextBox readBox, Screen screen) {
+        DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("MM/dd/YY HH:mm");
+
+        while (true) {
+            ServerMessage incomingMsg;
+
+            try {
+                incomingMsg = (ServerMessage) in.readObject();
             }
-        } catch (IOException ioe) {
-            System.err.println("ERROR: could not open input stream - closing connection");
+            catch (IOException | ClassNotFoundException e){
+                try {
+                    screen.stopScreen();
+                } catch (IOException ioe) {}
+                System.err.println("Error: disconnected from server - remote server may have shut down");
+                return;
+            }
+
+            switch (incomingMsg.getType()){
+                case Chat:
+                    Quartet<Instant, String, Integer, String> payload =
+                        (Quartet<Instant, String, Integer, String>) incomingMsg.getPayload();
+                    String timeStamp = payload.getValue0().atZone(ZoneId.systemDefault()).format(dateFormat);
+                    String username = payload.getValue1();
+                    int userID = payload.getValue2();
+                    String messageBody = payload.getValue3();
+                    String signedMsg = username + " #" + userID + "\n" + timeStamp + " | " + messageBody + "\n";
+
+                    if (readBox.getCaretPosition().getRow() > readBox.getLineCount() - readBox.getSize().getRows()) {
+                        readBox.addLineAndScrollDown(signedMsg);
+                    }
+                    else {
+                        readBox.addLine(signedMsg);
+                    }
+
+                default:
+            }
         }
     }
 }

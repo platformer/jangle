@@ -6,13 +6,13 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.format.DateTimeFormatter;
-import java.util.Date;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -20,6 +20,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.javatuples.Quartet;
 
 public class ServerMode {
     private static final String SERVER_LOG_FILENAME = "jangle_server.log";
@@ -52,53 +54,69 @@ public class ServerMode {
             ServerSocket serverSocket,
             PrintWriter serverLog, PrintWriter chatlog) {
         AtomicInteger totMessages = new AtomicInteger(0);
-        DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("MM/dd/yy HH:mm");
+        DateTimeFormatter chatDateFormat = DateTimeFormatter.ofPattern("MM/dd/yy HH:mm");
 
         while (true) {
             Socket s;
             try {
                 s = serverSocket.accept();
             } catch (IOException ioe) {
-                serverLog.println(new Date() + ": Failed to accept incoming connection");
+                serverLog.println(Instant.now() + " : Failed to accept incoming connection");
                 continue;
             }
 
             InetAddress ip = s.getInetAddress();
-            serverLog.println(
-                    new Date() + ": Received connection from " + ip.toString() + " port " + s.getPort());
+            serverLog.println(Instant.now() + " : Received connection from " + ip.toString() + " port " + s.getPort());
 
             UserHandle user = new UserHandle(ip);
+            user.activate(s, serverLog);
 
             if (inactiveUsers.contains(user)) {
                 inactiveUsers.remove(user);
             } else if (activeUsers.contains(user)) {
                 try {
-                    s.close();
-                    serverLog.println(
-                            new Date() + ": Closing duplicate connection from " + ip.toString() + " port "
-                                    + s.getPort());
+                    ServerMessage rejectConnectionMessage = new ServerMessage(ServerMessage.ServerMessageType.DisconnectDuplicate, true);
+                    user.getObjectOutputStream().writeObject(rejectConnectionMessage);
+                    user.getObjectOutputStream().flush();
+                    user.deactivate();
                 } catch (IOException ioe) {}
+                serverLog.println(Instant.now() + " : Closing duplicate connection from " + ip.toString() + " port " + s.getPort());
                 continue;
             } else {
-                serverLog.println(new Date() + ": User from " + ip.toString() + " is new - id set to " + user.getID());
+                serverLog.println(Instant.now() + " : User from " + ip.toString() + " is new - id set to " + user.getID());
             }
 
-            user.activate(s, serverLog);
-            activeUsers.add(user);
+            try {
+                ServerMessage acceptConnectionMessage = new ServerMessage(ServerMessage.ServerMessageType.DisconnectDuplicate, false);
+                user.getObjectOutputStream().writeObject(acceptConnectionMessage);
+                user.getObjectOutputStream().flush();
+            }
+            catch (IOException ioe){
+                serverLog.println(Instant.now() + " : Failed to accept connection from user " + user.getID());
+                user.deactivate();
+                continue;
+            }
 
             try {
                 UserMessage usernameMsg = (UserMessage) user.getObjectInputStream().readObject();
                 user.setName((String) usernameMsg.getPayload());
             } catch (IOException | ClassNotFoundException e) {
-                serverLog.println(new Date() + ": Could not update name for user " + user.getID());
+                serverLog.println(Instant.now() + " : Could not get name for user " + user.getID() + " - closing connection");
+                user.deactivate();
+                continue;
             }
+
+            activeUsers.add(user);
 
             try {
                 BufferedReader chatLogReader = new BufferedReader(new FileReader(CHAT_lOG_FILENAME));
                 pool.execute(() -> sendChatLogChunk(user, chatLogReader, totMessages, totMessages.get(), 50));
-            } catch (FileNotFoundException fnfe) {}
+            } catch (FileNotFoundException fnfe) {
+                fnfe.printStackTrace();
+                return;
+            }
 
-            pool.execute(() -> listen(user, totMessages, dateFormat, pool, activeUsers, inactiveUsers, serverLog, chatlog));
+            pool.execute(() -> listen(user, totMessages, chatDateFormat, pool, activeUsers, inactiveUsers, serverLog, chatlog));
         }
     }
 
@@ -118,7 +136,6 @@ public class ServerMode {
             ExecutorService pool,
             Set<UserHandle> activeUsers, Set<UserHandle> inactiveUsers,
             PrintWriter serverLog, PrintWriter chatLog) {
-        String username = user.getName() + " #" + user.getID();
         ObjectInputStream in = user.getObjectInputStream();
 
         while (true) {
@@ -127,30 +144,43 @@ public class ServerMode {
             try {
                 serializedMessage = (UserMessage) in.readObject();
             } catch (IOException | ClassNotFoundException e) {
-                serverLog.println(new Date() + ": User " + user.getID()
-                        + " has disconnected - closing connection");
+                serverLog.println(Instant.now() + " : User " + user.getID() + " has disconnected - closing connection");
                 user.deactivate();
                 activeUsers.remove(user);
                 inactiveUsers.add(user);
                 return;
             }
 
-            if (serializedMessage.getType() == UserMessage.MessageType.Chat) {
-                serverLog.println(new Date() + ": Received message from user " + user.getID());
-                String msg = (String) serializedMessage.getPayload();
-                String timestampedMsg = LocalDateTime.now().format(dateFormat) + " | " + msg;
-                String signedMsg = username + "\n" + timestampedMsg + "\n";
-                pool.execute(() -> disseminate(signedMsg, activeUsers));
-                chatLog.println(signedMsg);
-                totMessages.incrementAndGet();
+            switch (serializedMessage.getType()) {
+                case Chat:
+                    Instant receiveTime = Instant.now();
+                    String message = (String) serializedMessage.getPayload();
+                    serverLog.println(receiveTime + " : Received message from user " + user.getID());
+                    Quartet<Instant, String, Integer, String> payload = new Quartet<>(
+                            receiveTime,
+                            user.getName(),
+                            user.getID(),
+                            message);
+                    ServerMessage outgoingMessage = new ServerMessage(ServerMessage.ServerMessageType.Chat, payload);
+                    pool.execute(() -> disseminate(outgoingMessage, activeUsers, serverLog));
+                    chatLog.println(receiveTime + " " + user.getName() + " " + user.getID() + "\n" + message);
+                    totMessages.incrementAndGet();
+                    break;
+
+                default:
             }
         }
     }
 
-    private static void disseminate(String signedMsg, Set<UserHandle> activeUsers) {
+    private static void disseminate(ServerMessage message, Set<UserHandle> activeUsers, PrintWriter serverLog) {
         for (UserHandle user : activeUsers) {
-            PrintWriter out = user.getPrintWriter();
-            out.println(signedMsg);
+            try {
+                ObjectOutputStream out = user.getObjectOutputStream();
+                out.writeObject(message);
+                out.flush();
+            } catch (IOException ioe) {
+                serverLog.println(Instant.now() + " : Failed to send message to user " + user.getID());
+            }
         }
     }
 }

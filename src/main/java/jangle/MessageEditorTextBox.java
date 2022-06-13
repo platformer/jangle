@@ -20,7 +20,7 @@ public class MessageEditorTextBox extends TextBox {
     public Result handleKeyStroke(KeyStroke keyStroke) {
         if (keyStroke.getKeyType() == KeyType.Enter) {
             if (!getText().equals("")) {
-                UserMessage serializedMessage = new UserMessage(UserMessage.MessageType.Chat, getText());
+                UserMessage serializedMessage = new UserMessage(UserMessage.UserMessageType.Chat, getText());
 
                 try {
                     out.writeObject(serializedMessage);
