@@ -19,6 +19,12 @@
 
   <dependencies>
     <dependency>
+      <groupId>io.lettuce</groupId>
+      <artifactId>lettuce-core</artifactId>
+      <version>6.1.8.RELEASE</version>
+    </dependency>
+
+    <dependency>
       <groupId>org.javatuples</groupId>
       <artifactId>javatuples</artifactId>
       <version>1.2</version>
