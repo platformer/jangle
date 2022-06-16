@@ -2,12 +2,15 @@ package jangle;
 
 import java.io.Serializable;
 import java.time.Instant;
+import java.util.List;
 
+import org.javatuples.Pair;
 import org.javatuples.Quartet;
 
 public class ServerMessage implements Serializable {
     public static enum ServerMessageType {
         DisconnectDuplicate,
+        ChatChunk,
         Chat
     }
 
@@ -25,6 +28,8 @@ public class ServerMessage implements Serializable {
                 case DisconnectDuplicate:
                     this.payload = (Boolean) payload;
                     break;
+                case ChatChunk:
+                    this.payload = (Pair<Integer, List<Quartet<Instant, String, Integer, String>>>) payload;
                 case Chat:
                     this.payload = (Quartet<Instant, String, Integer, String>) payload;
                     break;

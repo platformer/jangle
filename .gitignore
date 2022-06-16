@@ -28,6 +28,9 @@ bin/
 ### Mac OS ###
 .DS_Store
 
+### Redis ###
+**.rdb
+
 ### Miscellaneous ###
 test/
 

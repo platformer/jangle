@@ -2,8 +2,6 @@ package jangle;
 
 import java.io.Serializable;
 
-import org.javatuples.Pair;
-
 public class UserMessage implements Serializable {
     public static enum UserMessageType {
         Username,
@@ -15,9 +13,6 @@ public class UserMessage implements Serializable {
     private UserMessageType type;
     private Object payload;
 
-    // suppressing warning because I want to catch
-    // cast exception myself and throw an argument exception
-    @SuppressWarnings("unchecked")
     public UserMessage(UserMessageType type, Object payload) {
         this.type = type;
 
@@ -32,11 +27,11 @@ public class UserMessage implements Serializable {
                     break;
 
                 case RequestOldMessages:
-                    this.payload = (Pair<Integer, Integer>) payload;
+                    this.payload = (Integer) payload;
                     break;
 
                 case RequestNewMessages:
-                    this.payload = (Pair<Integer, Integer>) payload;
+                    this.payload = (Integer) payload;
                     break;
             }
         } catch (ClassCastException cce) {

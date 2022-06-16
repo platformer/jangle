@@ -15,10 +15,12 @@ public class UserHandle {
     private Socket socket;
     private ObjectInputStream serverIn;
     private ObjectOutputStream serverOut;
+    private boolean isDetached;
 
     public UserHandle(InetAddress ip) {
         this.ip = ip;
         this.id = this.ip.hashCode() % 9000 + 1000;
+        this.isDetached = false;
     }
 
     public void activate(Socket socket, PrintWriter serverLog) {
@@ -31,13 +33,13 @@ public class UserHandle {
         }
     }
 
-    public void deactivate(){
+    public void deactivate() {
         try {
             serverIn.close();
             serverOut.close();
             socket.close();
+        } catch (IOException ioe) {
         }
-        catch (IOException ioe){}
     }
 
     @Override
@@ -79,5 +81,13 @@ public class UserHandle {
 
     public ObjectOutputStream getObjectOutputStream() {
         return serverOut;
+    }
+
+    public boolean isDetached() {
+        return isDetached;
+    }
+
+    public void setDetached(boolean isDetached) {
+        this.isDetached = isDetached;
     }
 }
