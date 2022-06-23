@@ -224,14 +224,14 @@ public class UserMode {
                     readBox.addLine("");
                     readBox.setFirstMessageNum(firstMessageNum);
                     readBox.removeExcessLines(false);
-                    readBox.setCaretPosition((lastMessageNum - firstMessageNum) * 3, 0);
+                    readBox.setCaretPosition((lastMessageNum - firstMessageNum) * 3 + 2, 0);
                 }
                 else if (firstMessageNum > readBox.getLastMessageNum()){
                     readBox.setText(readBox.getText().trim() + "\n\n" + chunkMessage);
                     readBox.addLine("");
                     readBox.setLastMessageNum(lastMessageNum);
                     readBox.removeExcessLines(true);
-                    readBox.setCaretPosition((firstMessageNum - readBox.getFirstMessageNum()) * 3, 0);
+                    readBox.setCaretPosition((firstMessageNum - readBox.getFirstMessageNum()) * 3 - 1, 0);
                 }
             }
         }

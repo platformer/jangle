@@ -15,9 +15,9 @@ import com.googlecode.lanterna.input.KeyType;
 public class ChatWindowTextBox extends TextBox{
     private final Window baseWindow;
     private final ObjectOutputStream out;
-    private Instant lastScrollTime;
-    private int firstMessageNum;
-    private int lastMessageNum;
+    private volatile Instant lastScrollTime;
+    private volatile int firstMessageNum;
+    private volatile int lastMessageNum;
 
     public ChatWindowTextBox(Window baseWindow, ObjectOutputStream out, TerminalSize preferredSize, Style style){
         super(preferredSize, style);
@@ -29,7 +29,7 @@ public class ChatWindowTextBox extends TextBox{
     }
 
     @Override
-    public Result handleKeyStroke(KeyStroke keyStroke) {
+    public synchronized Result handleKeyStroke(KeyStroke keyStroke) {
         KeyType keyType = keyStroke.getKeyType();
         Result result;
         TerminalPosition caretPosition;
@@ -102,7 +102,7 @@ public class ChatWindowTextBox extends TextBox{
         return result;
     }
 
-    public ChatWindowTextBox removeExcessLines(boolean fromTop){
+    public synchronized ChatWindowTextBox removeExcessLines(boolean fromTop){
         if (lastMessageNum - firstMessageNum + 1 > App.MAX_DISPLAY_MESSAGES){
             String[] lines = (getText().trim() + "\n").split("\n", -1);
             String newText = "";
@@ -147,33 +147,33 @@ public class ChatWindowTextBox extends TextBox{
         return this;
     }
 
-    public ChatWindowTextBox scrollToTop(){
+    public synchronized ChatWindowTextBox scrollToTop(){
         setCaretPosition(0, 0);
         return this;
     }
 
-    public ChatWindowTextBox scrollToBottom(){
+    public synchronized ChatWindowTextBox scrollToBottom(){
         setCaretPosition(Integer.MAX_VALUE, 0);
         return this;
     }
 
-    public int getFirstMessageNum(){
+    public synchronized int getFirstMessageNum(){
         return firstMessageNum;
     }
 
-    public void setFirstMessageNum(int firstMessageNum){
+    public synchronized void setFirstMessageNum(int firstMessageNum){
         this.firstMessageNum = firstMessageNum;
     }
 
-    public int getLastMessageNum(){
+    public synchronized int getLastMessageNum(){
         return lastMessageNum;
     }
 
-    public void setLastMessageNum(int lastMessageNum){
+    public synchronized void setLastMessageNum(int lastMessageNum){
         this.lastMessageNum = lastMessageNum;
     }
 
-    public void incrementLastMessageNum(){
+    public synchronized void incrementLastMessageNum(){
         lastMessageNum++;
     }
 }

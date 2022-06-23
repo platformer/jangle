@@ -21,7 +21,7 @@ public class MessageEditorTextBox extends TextBox {
     }
 
     @Override
-    public Result handleKeyStroke(KeyStroke keyStroke) {
+    public synchronized Result handleKeyStroke(KeyStroke keyStroke) {
         if (isBlocked){
             return Result.HANDLED;
         }
@@ -79,7 +79,7 @@ public class MessageEditorTextBox extends TextBox {
         return super.handleKeyStroke(keyStroke);
     }
 
-    private void restoreText(String text){
+    private synchronized void restoreText(String text){
         setText(text);
         setCaretPosition(Integer.MAX_VALUE);
         isBlocked = false;
