@@ -2,7 +2,13 @@ package jangle;
 
 public class App
 {
-    final static int DEFAULT_PORT_NUMBER = 52042;
+    public static final int MAX_CHARS_PER_MESSAGE = 30;
+    public static final int SECONDS_BETWEEN_CHUNK_REQUESTS = 5;
+    public static final int NUM_MESSAGES_PER_CHUNK = 10;
+    public static final int MAX_DISPLAY_MESSAGES = 20;
+    public static final int POPUP_TIMOUT_MILLIS = 2000;
+
+    private final static int DEFAULT_PORT_NUMBER = 52042;
 
     public static void main(String[] args) {
         if (args.length == 0) {
@@ -13,13 +19,13 @@ public class App
             printHelp();
         }
         else if (args[0].equals("server")) {
-            if (args.length != 1) {
+            if (args.length != 2) {
                 System.err.println("ERROR: wrong number of arguments");
                 printHelp();
                 return;
             }
 
-            ServerMode.startServer(DEFAULT_PORT_NUMBER);
+            ServerMode.startServer(args[1], DEFAULT_PORT_NUMBER);
         }
         else if (args[0].equals("chat")) {
             if (args.length != 3) {
@@ -31,6 +37,17 @@ public class App
             String host = args[1];
             String username = args[2];
 
+            if (username.length() > 64){
+                System.err.println("ERROR: username is too long");
+                return;
+            }
+
+            if (username.contains("\\")){
+                System.err.println("ERROR: username contains backslash");
+                return;
+            }
+
+            username = username.trim().replaceAll("\\s", " ").replaceAll("'", "''");
             UserMode.startChat(host, DEFAULT_PORT_NUMBER, username);
         }
         else {
@@ -42,7 +59,7 @@ public class App
     // prints help message
     private static void printHelp() {
         System.out.println("Valid Commands:");
-        System.out.println("server                        (start a server)");
+        System.out.println("server <jangle_app password>  (start a server)");
         System.out.println("chat <hostname> <name>        (connect to server at <hostname> with username <name>)");
         System.out.println("-h | --help | help            (print help message)");
     }

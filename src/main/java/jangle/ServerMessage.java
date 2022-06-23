@@ -2,12 +2,17 @@ package jangle;
 
 import java.io.Serializable;
 import java.time.Instant;
+import java.util.List;
 
 import org.javatuples.Quartet;
+import org.javatuples.Triplet;
 
 public class ServerMessage implements Serializable {
     public static enum ServerMessageType {
         DisconnectDuplicate,
+        ID,
+        RecentChatChunk,
+        ChatChunk,
         Chat
     }
 
@@ -24,6 +29,15 @@ public class ServerMessage implements Serializable {
             switch (this.type) {
                 case DisconnectDuplicate:
                     this.payload = (Boolean) payload;
+                    break;
+                case ID:
+                    this.payload = (Integer) payload;
+                    break;
+                case RecentChatChunk:
+                    this.payload = (Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>) payload;
+                    break;
+                case ChatChunk:
+                    this.payload = (Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>) payload;
                     break;
                 case Chat:
                     this.payload = (Quartet<Instant, String, Integer, String>) payload;
