@@ -15,9 +15,9 @@ import com.googlecode.lanterna.input.KeyType;
 public class ChatWindowTextBox extends TextBox{
     private final Window baseWindow;
     private final ObjectOutputStream out;
-    private volatile Instant lastScrollTime;
-    private volatile int firstMessageNum;
-    private volatile int lastMessageNum;
+    private Instant lastScrollTime;
+    private int firstMessageNum;
+    private int lastMessageNum;
 
     public ChatWindowTextBox(Window baseWindow, ObjectOutputStream out, TerminalSize preferredSize, Style style){
         super(preferredSize, style);
@@ -157,23 +157,23 @@ public class ChatWindowTextBox extends TextBox{
         return this;
     }
 
-    public synchronized int getFirstMessageNum(){
+    public int getFirstMessageNum(){
         return firstMessageNum;
     }
 
-    public synchronized void setFirstMessageNum(int firstMessageNum){
+    public void setFirstMessageNum(int firstMessageNum){
         this.firstMessageNum = firstMessageNum;
     }
 
-    public synchronized int getLastMessageNum(){
+    public int getLastMessageNum(){
         return lastMessageNum;
     }
 
-    public synchronized void setLastMessageNum(int lastMessageNum){
+    public void setLastMessageNum(int lastMessageNum){
         this.lastMessageNum = lastMessageNum;
     }
 
-    public synchronized void incrementLastMessageNum(){
+    public void incrementLastMessageNum(){
         lastMessageNum++;
     }
 }

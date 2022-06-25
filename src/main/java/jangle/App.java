@@ -3,10 +3,10 @@ package jangle;
 public class App
 {
     public static final int MAX_CHARS_PER_MESSAGE = 30;
-    public static final int SECONDS_BETWEEN_CHUNK_REQUESTS = 5;
+    public static final double SECONDS_BETWEEN_CHUNK_REQUESTS = 1.5;
     public static final int NUM_MESSAGES_PER_CHUNK = 10;
     public static final int MAX_DISPLAY_MESSAGES = 20;
-    public static final int POPUP_TIMOUT_MILLIS = 2000;
+    public static final int POPUP_TIMOUT_MILLIS = 1500;
 
     private final static int DEFAULT_PORT_NUMBER = 52042;
 

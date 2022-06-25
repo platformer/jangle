@@ -104,6 +104,14 @@ public class ServerMode {
         }
     }
 
+    private static void sendMessageToUser(UserHandle user, ServerMessage message) throws IOException{
+        ObjectOutputStream out = user.getObjectOutputStream();
+        synchronized (out){
+            out.writeObject(message);
+            out.flush();
+        }
+    }
+
     private static void run(
             ServerSocket serverSocket,
             Connection conn,
@@ -128,8 +136,7 @@ public class ServerMode {
             if (activeUsers.contains(user)) {
                 try {
                     ServerMessage rejectConnectionMessage = new ServerMessage(ServerMessage.ServerMessageType.DisconnectDuplicate, true);
-                    user.getObjectOutputStream().writeObject(rejectConnectionMessage);
-                    user.getObjectOutputStream().flush();
+                    sendMessageToUser(user, rejectConnectionMessage);
                     user.deactivate();
                 } catch (IOException ioe) {}
                 serverLog.println(Instant.now() + " : Closing duplicate connection from " + ip.toString() + " port " + s.getPort());
@@ -138,8 +145,7 @@ public class ServerMode {
 
             try {
                 ServerMessage acceptConnectionMessage = new ServerMessage(ServerMessage.ServerMessageType.DisconnectDuplicate, false);
-                user.getObjectOutputStream().writeObject(acceptConnectionMessage);
-                user.getObjectOutputStream().flush();
+                sendMessageToUser(user, acceptConnectionMessage);
             }
             catch (IOException ioe){
                 serverLog.println(Instant.now() + " : Failed to accept connection from user " + user.getID());
@@ -190,8 +196,7 @@ public class ServerMode {
 
             try {
                 ServerMessage idMessage = new ServerMessage(ServerMessage.ServerMessageType.ID, user.getID());
-                user.getObjectOutputStream().writeObject(idMessage);
-                user.getObjectOutputStream().flush();
+                sendMessageToUser(user, idMessage);
             }
             catch (IOException ioe){
                 serverLog.println(Instant.now() + " : Failed to send ID to user " + user.getID() + " - closing connection");
@@ -202,177 +207,6 @@ public class ServerMode {
             activeUsers.add(user);
             pool.execute(() -> sendMostRecentChatChunk(user, App.NUM_MESSAGES_PER_CHUNK, conn, serverLog));
             pool.execute(() -> listen(user, conn, pool, activeUsers, serverLog, chatlog));
-        }
-    }
-
-    private static void sendMostRecentChatChunk(
-            UserHandle user,
-            int numMessages,
-            Connection conn,
-            PrintWriter serverLog) {
-        synchronized (user){
-            int chunkFirstMessageNum = 1;
-            int chunkLastMessageNum = 0;
-            List<Quartet<Instant, String, Integer, String>> messages = new ArrayList<>();
-
-            String sql =
-                "SELECT * FROM (" +
-                    "SELECT " +
-                        "jangle_chat.chat_id AS chat_id, " +
-                        "jangle_chat.time AS time, " +
-                        "jangle_user.name AS name, " +
-                        "jangle_user.user_id AS user_id, " +
-                        "jangle_chat.body AS body " +
-                    "FROM jangle_chat, jangle_user " +
-                    "WHERE jangle_chat.ip = jangle_user.ip " +
-                    "ORDER BY chat_id DESC LIMIT ?) AS jangle_app_chat_chunk " +
-                "ORDER BY chat_id ASC";
-
-            try (PreparedStatement chatChunkStmt = conn.prepareStatement(sql)){
-                chatChunkStmt.setInt(1, App.NUM_MESSAGES_PER_CHUNK);
-
-                try (ResultSet chatChunkResults = chatChunkStmt.executeQuery()){
-                    while (chatChunkResults.next()){
-                        if (chatChunkResults.isFirst()){
-                            chunkFirstMessageNum = chatChunkResults.getInt("chat_id");
-                        }
-                        else if (chatChunkResults.isLast()){
-                            chunkLastMessageNum = chatChunkResults.getInt("chat_id");
-                        }
-
-                        messages.add(new Quartet<Instant,String,Integer,String>(
-                            Instant.parse(chatChunkResults.getString("time")),
-                            chatChunkResults.getString("name"),
-                            chatChunkResults.getInt("user_id"),
-                            chatChunkResults.getString("body")
-                        ));
-                    }
-                }
-            } catch (SQLException sqle){
-                serverLog.println(Instant.now() + " : Could not read chat messages in database");
-                return;
-            }
-
-            try {
-                user.getObjectOutputStream().writeObject(new ServerMessage(ServerMessage.ServerMessageType.RecentChatChunk,
-                    new Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>(
-                        chunkFirstMessageNum,
-                        chunkLastMessageNum,
-                        messages
-                    )
-                ));
-                user.getObjectOutputStream().flush();
-            } catch (IOException e) {
-                serverLog.println(Instant.now() + " : Could not send chat chunk to user " + user.getID());
-            }
-
-            user.setDetached(false);
-        }
-    }
-
-    private static void sendChatChunk(
-            UserHandle user,
-            int curMessageNum,
-            int numMessages,
-            Connection conn,
-            PrintWriter serverLog) {
-        synchronized (user){
-            if ((!user.getDetached() && numMessages > 0)
-                || numMessages == 0
-                || curMessageNum <= 1
-            ){
-                return;
-            }
-
-            int firstMessageNum;
-            int lastMessageNum;
-
-            if (numMessages < 0){
-                firstMessageNum = curMessageNum + numMessages;
-                lastMessageNum = curMessageNum - 1;
-            }
-            else {
-                firstMessageNum = curMessageNum + 1;
-                lastMessageNum = curMessageNum + numMessages;
-            }
-
-            int chatLength = 0;
-
-            try (Statement chatLengthStmt = conn.createStatement()){
-                String sql = "SELECT MAX (chat_id) FROM jangle_chat";
-
-                try (ResultSet chatLengthResults = chatLengthStmt.executeQuery(sql)) {
-                    chatLengthResults.next();
-                    chatLength = chatLengthResults.getInt(1);
-                }
-            } catch (SQLException sqle){
-                serverLog.println(Instant.now() + " : Could not read chat length from database");
-                return;
-            }
-
-            int chunkFirstMessageNum = 0;
-            int chunkLastMessageNum = 0;
-            List<Quartet<Instant, String, Integer, String>> messages = new ArrayList<>();
-            
-            String sql =
-                "SELECT " +
-                    "jangle_chat.chat_id AS chat_id, " +
-                    "jangle_chat.time AS time, " +
-                    "jangle_user.name AS name, " +
-                    "jangle_user.user_id AS user_id, " +
-                    "jangle_chat.body AS body " +
-                "FROM jangle_chat, jangle_user " +
-                "WHERE " +
-                    "jangle_chat.ip = jangle_user.ip AND " +
-                    "jangle_chat.chat_id >= ? AND " +
-                    "jangle_chat.chat_id <= ? " +
-                "ORDER BY chat_id ASC";
-            
-            try (PreparedStatement chatChunkStmt = conn.prepareStatement(sql)){
-                chatChunkStmt.setInt(1, firstMessageNum);
-                chatChunkStmt.setInt(2, lastMessageNum);
-
-                try (ResultSet chatChunkResults = chatChunkStmt.executeQuery()){
-                    while (chatChunkResults.next()){
-                        if (chatChunkResults.isFirst()){
-                            chunkFirstMessageNum = chatChunkResults.getInt("chat_id");
-                        }
-                        else if (chatChunkResults.isLast()){
-                            chunkLastMessageNum = chatChunkResults.getInt("chat_id");
-                        }
-
-                        messages.add(new Quartet<Instant,String,Integer,String>(
-                            Instant.parse(chatChunkResults.getString("time")),
-                            chatChunkResults.getString("name"),
-                            chatChunkResults.getInt("user_id"),
-                            chatChunkResults.getString("body")
-                        ));
-                    }
-                }
-            } catch (SQLException sqle){
-                serverLog.println(Instant.now() + " : Could not read chat messages in database");
-                return;
-            }
-
-            try {
-                user.getObjectOutputStream().writeObject(new ServerMessage(ServerMessage.ServerMessageType.ChatChunk,
-                    new Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>(
-                        chunkFirstMessageNum,
-                        chunkLastMessageNum,
-                        messages
-                    )
-                ));
-                user.getObjectOutputStream().flush();
-            } catch (IOException e) {
-                serverLog.println(Instant.now() + " : Could not send chat chunk to user " + user.getID());
-            }
-
-            if (chunkLastMessageNum >= chatLength){
-                user.setDetached(false);
-            }
-            else {
-                user.setDetached(true);
-            }
         }
     }
 
@@ -434,34 +268,21 @@ public class ServerMode {
                     }
                 }
             }
-            else if (serializedMessage.getType() == UserMessage.UserMessageType.RequestOldMessages){
+            else if (serializedMessage.getType() == UserMessage.UserMessageType.RequestOldMessages ||
+                     serializedMessage.getType() == UserMessage.UserMessageType.RequestNewMessages){
                 Instant currChatChunkRequestTime = Instant.now();
                 if (Duration.between(user.getLastChatChunkRequestTime(), currChatChunkRequestTime).getSeconds()
                     < App.SECONDS_BETWEEN_CHUNK_REQUESTS){
                     continue;
                 }
 
-                user.setLastChatChunkRequestTime(currChatChunkRequestTime);
-                pool.execute(() -> sendChatChunk(
-                    user,
-                    (Integer) serializedMessage.getPayload(),
-                    -App.NUM_MESSAGES_PER_CHUNK,
-                    conn,
-                    serverLog
-                ));
-            }
-            else if (serializedMessage.getType() == UserMessage.UserMessageType.RequestNewMessages){
-                Instant currChatChunkRequestTime = Instant.now();
-                if (Duration.between(user.getLastChatChunkRequestTime(), currChatChunkRequestTime).getSeconds()
-                    < App.SECONDS_BETWEEN_CHUNK_REQUESTS){
-                    continue;
-                }
+                UserMessage.UserMessageType msgType = serializedMessage.getType();
 
                 user.setLastChatChunkRequestTime(currChatChunkRequestTime);
                 pool.execute(() -> sendChatChunk(
                     user,
                     (Integer) serializedMessage.getPayload(),
-                    App.NUM_MESSAGES_PER_CHUNK,
+                    App.NUM_MESSAGES_PER_CHUNK * (msgType == UserMessage.UserMessageType.RequestOldMessages? -1 : 1),
                     conn,
                     serverLog
                 ));
@@ -469,14 +290,166 @@ public class ServerMode {
         }
     }
 
+    private static void sendMostRecentChatChunk(
+            UserHandle user,
+            int numMessages,
+            Connection conn,
+            PrintWriter serverLog) {
+        synchronized (user){
+            Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> chatChunk;
+
+            String sql =
+                "SELECT * FROM (" +
+                    "SELECT " +
+                        "jangle_chat.chat_id AS chat_id, " +
+                        "jangle_chat.time AS time, " +
+                        "jangle_user.name AS name, " +
+                        "jangle_user.user_id AS user_id, " +
+                        "jangle_chat.body AS body " +
+                    "FROM jangle_chat, jangle_user " +
+                    "WHERE jangle_chat.ip = jangle_user.ip " +
+                    "ORDER BY chat_id DESC LIMIT ?) AS jangle_app_chat_chunk " +
+                "ORDER BY chat_id ASC";
+
+            try (PreparedStatement chatChunkStmt = conn.prepareStatement(sql)){
+                chatChunkStmt.setInt(1, App.NUM_MESSAGES_PER_CHUNK);
+
+                try (ResultSet chatChunkResults = chatChunkStmt.executeQuery()){
+                    chatChunk = buildChunkMessage(chatChunkResults, true);
+                }
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Could not read chat messages in database");
+                return;
+            }
+
+            try {
+                sendMessageToUser(user, new ServerMessage(ServerMessage.ServerMessageType.RecentChatChunk, chatChunk));
+            } catch (IOException e) {
+                serverLog.println(Instant.now() + " : Could not send chat chunk to user " + user.getID());
+            }
+
+            user.setDetached(false);
+        }
+    }
+
+    private static void sendChatChunk(
+            UserHandle user,
+            int curMessageNum,
+            int numMessages,
+            Connection conn,
+            PrintWriter serverLog) {
+        synchronized (user){
+            if ((!user.getDetached() && numMessages > 0)
+                || numMessages == 0
+                || curMessageNum <= 1
+            ){
+                return;
+            }
+
+            int firstMessageNum;
+            int lastMessageNum;
+
+            if (numMessages < 0){
+                firstMessageNum = curMessageNum + numMessages;
+                lastMessageNum = curMessageNum - 1;
+            }
+            else {
+                firstMessageNum = curMessageNum + 1;
+                lastMessageNum = curMessageNum + numMessages;
+            }
+
+            int chatLength = 0;
+
+            try (Statement chatLengthStmt = conn.createStatement()){
+                String sql = "SELECT MAX (chat_id) FROM jangle_chat";
+
+                try (ResultSet chatLengthResults = chatLengthStmt.executeQuery(sql)) {
+                    chatLengthResults.next();
+                    chatLength = chatLengthResults.getInt(1);
+                }
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Could not read chat length from database");
+                return;
+            }
+
+            Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> chatChunk;
+            
+            String sql =
+                "SELECT " +
+                    "jangle_chat.chat_id AS chat_id, " +
+                    "jangle_chat.time AS time, " +
+                    "jangle_user.name AS name, " +
+                    "jangle_user.user_id AS user_id, " +
+                    "jangle_chat.body AS body " +
+                "FROM jangle_chat, jangle_user " +
+                "WHERE " +
+                    "jangle_chat.ip = jangle_user.ip AND " +
+                    "jangle_chat.chat_id >= ? AND " +
+                    "jangle_chat.chat_id <= ? " +
+                "ORDER BY chat_id ASC";
+            
+            try (PreparedStatement chatChunkStmt = conn.prepareStatement(sql)){
+                chatChunkStmt.setInt(1, firstMessageNum);
+                chatChunkStmt.setInt(2, lastMessageNum);
+
+                try (ResultSet chatChunkResults = chatChunkStmt.executeQuery()){
+                    chatChunk = buildChunkMessage(chatChunkResults, false);
+                }
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Could not read chat messages in database");
+                return;
+            }
+
+            try {
+                sendMessageToUser(user, new ServerMessage(ServerMessage.ServerMessageType.ChatChunk, chatChunk));
+            } catch (IOException e) {
+                serverLog.println(Instant.now() + " : Could not send chat chunk to user " + user.getID());
+            }
+
+            if (chatChunk.getValue1() >= chatLength){
+                user.setDetached(false);
+            }
+            else {
+                user.setDetached(true);
+            }
+        }
+    }
+
+    private static Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>
+    buildChunkMessage(ResultSet chatChunkResults, boolean isRecentChunk) throws SQLException{
+        int chunkFirstMessageNum = isRecentChunk? 1 : 0;
+        int chunkLastMessageNum = 0;
+        List<Quartet<Instant, String, Integer, String>> messages = new ArrayList<>();
+
+        while (chatChunkResults.next()){
+            if (chatChunkResults.isFirst()){
+                chunkFirstMessageNum = chatChunkResults.getInt("chat_id");
+            }
+            if (chatChunkResults.isLast()){
+                chunkLastMessageNum = chatChunkResults.getInt("chat_id");
+            }
+
+            messages.add(new Quartet<Instant,String,Integer,String>(
+                Instant.parse(chatChunkResults.getString("time")),
+                chatChunkResults.getString("name"),
+                chatChunkResults.getInt("user_id"),
+                chatChunkResults.getString("body")
+            ));
+        }
+
+        return new Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>(
+            chunkFirstMessageNum,
+            chunkLastMessageNum,
+            messages
+        );
+    }
+
     private static void disseminate(ServerMessage message, Set<UserHandle> activeUsers, PrintWriter serverLog) {
         for (UserHandle user : activeUsers) {
             synchronized (user){
                 if (!user.getDetached()){
                     try {
-                        ObjectOutputStream out = user.getObjectOutputStream();
-                        out.writeObject(message);
-                        out.flush();
+                        sendMessageToUser(user, message);
                     } catch (IOException ioe) {
                         serverLog.println(Instant.now() + " : Failed to send message to user " + user.getID());
                     }

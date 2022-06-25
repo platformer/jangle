@@ -180,44 +180,18 @@ public class UserMode {
                 }
             }
             else if (incomingMsg.getType() == ServerMessage.ServerMessageType.RecentChatChunk) {
-                Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> payload =
-                    (Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>) incomingMsg.getPayload();
-                int firstMessageNum = payload.getValue0();
-                int lastMessageNum = payload.getValue1();
-                List<Quartet<Instant, String, Integer, String>> messages = payload.getValue2();
-                String chunkMessage = "";
-
-                for (int i = 0; i < messages.size(); i++){
-                    Quartet<Instant, String, Integer, String> message = messages.get(i);
-                    String timeStamp = message.getValue0().atZone(ZoneId.systemDefault()).format(dateFormat);
-                    String username = message.getValue1();
-                    int userID = message.getValue2();
-                    String messageBody = message.getValue3();
-                    chunkMessage += username + " #" + userID + "\n" + timeStamp + " | " + messageBody + "\n\n";
-                }
-
-                readBox.setFirstMessageNum(firstMessageNum);
-                readBox.setLastMessageNum(lastMessageNum);
-                readBox.setText(chunkMessage);
+                Triplet<Integer, Integer, String> chunkMessageInfo = buildChunkMessageInfo(incomingMsg, dateFormat);
+                readBox.setFirstMessageNum(chunkMessageInfo.getValue0());
+                readBox.setLastMessageNum(chunkMessageInfo.getValue1());
+                readBox.setText(chunkMessageInfo.getValue2());
                 readBox.addLine("");
                 readBox.scrollToBottom();
             }
             else if (incomingMsg.getType() == ServerMessage.ServerMessageType.ChatChunk) {
-                Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> payload =
-                    (Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>) incomingMsg.getPayload();
-                int firstMessageNum = payload.getValue0();
-                int lastMessageNum = payload.getValue1();
-                List<Quartet<Instant, String, Integer, String>> messages = payload.getValue2();
-                String chunkMessage = "";
-
-                for (int i = 0; i < messages.size(); i++){
-                    Quartet<Instant, String, Integer, String> message = messages.get(i);
-                    String timeStamp = message.getValue0().atZone(ZoneId.systemDefault()).format(dateFormat);
-                    String username = message.getValue1();
-                    int userID = message.getValue2();
-                    String messageBody = message.getValue3();
-                    chunkMessage += username + " #" + userID + "\n" + timeStamp + " | " + messageBody + "\n\n";
-                }
+                Triplet<Integer, Integer, String> chunkMessageInfo = buildChunkMessageInfo(incomingMsg, dateFormat);
+                int firstMessageNum = chunkMessageInfo.getValue0();
+                int lastMessageNum = chunkMessageInfo.getValue1();
+                String chunkMessage = chunkMessageInfo.getValue2();
 
                 if (lastMessageNum < readBox.getFirstMessageNum()){
                     readBox.setText(chunkMessage + readBox.getText().trim());
@@ -235,5 +209,26 @@ public class UserMode {
                 }
             }
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Triplet<Integer, Integer, String> buildChunkMessageInfo(ServerMessage incomingMsg, DateTimeFormatter dateFormat){
+        Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> payload =
+            (Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>) incomingMsg.getPayload();
+        int firstMessageNum = payload.getValue0();
+        int lastMessageNum = payload.getValue1();
+        List<Quartet<Instant, String, Integer, String>> messages = payload.getValue2();
+        String chunkMessage = "";
+
+        for (int i = 0; i < messages.size(); i++){
+            Quartet<Instant, String, Integer, String> message = messages.get(i);
+            String timeStamp = message.getValue0().atZone(ZoneId.systemDefault()).format(dateFormat);
+            String username = message.getValue1();
+            int userID = message.getValue2();
+            String messageBody = message.getValue3();
+            chunkMessage += username + " #" + userID + "\n" + timeStamp + " | " + messageBody + "\n\n";
+        }
+
+        return new Triplet<Integer,Integer,String>(firstMessageNum, lastMessageNum, chunkMessage);
     }
 }
