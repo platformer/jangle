@@ -33,7 +33,13 @@ public class ServerMode {
     private static final String CHAT_lOG_FILENAME = "jangle_chat.log";
 
     public static void startServer(String jangle_app_password, int port) {
-        ExecutorService pool = new ThreadPoolExecutor(3, 100, 1, TimeUnit.HOURS, new LinkedBlockingQueue<>());
+        ExecutorService pool = new ThreadPoolExecutor(
+            2,
+            1000,
+            App.USER_KEEPALIVE_MINUTES,
+            TimeUnit.MINUTES,
+            new LinkedBlockingQueue<>()
+        );
         Set<UserHandle> activeUsers = ConcurrentHashMap.newKeySet(100);
 
         try (

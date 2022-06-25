@@ -7,6 +7,7 @@ public class App
     public static final int NUM_MESSAGES_PER_CHUNK = 10;
     public static final int MAX_DISPLAY_MESSAGES = 20;
     public static final int POPUP_TIMOUT_MILLIS = 1500;
+    public static final int USER_KEEPALIVE_MINUTES = 60;
 
     private final static int DEFAULT_PORT_NUMBER = 52042;
 
