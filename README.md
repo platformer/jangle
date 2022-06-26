@@ -2,7 +2,7 @@
 This is a terminal chat program written entirely in Java. You can either host a Jangle server, or connect to a preexisting server if you know its IP address. This program is primarily intended to work on MacOS, Linux, and/or other Unix-like operating systems.
 
 # Usage
-First download the jar file [here](https://github.com/platformer/jangle/blob/c91bc90f195eccc797547af2900742072ec879f3/target/jangle-1.0.jar)
+First download Java 1.8 or newer. Then download the project's jar file [here](https://github.com/platformer/jangle/blob/c91bc90f195eccc797547af2900742072ec879f3/target/jangle-1.0.jar)
 
 To host a server, navigate to the desired working directory and run the following command (as a background job according to the shell you are using):  
 `java -jar jangle-1.0.jar server`
