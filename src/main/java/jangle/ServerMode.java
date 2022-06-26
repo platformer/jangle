@@ -25,6 +25,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.h2.tools.Server;
 import org.javatuples.Quartet;
 import org.javatuples.Triplet;
 
@@ -32,7 +33,7 @@ public class ServerMode {
     private static final String SERVER_LOG_FILENAME = "jangle_server.log";
     private static final String CHAT_lOG_FILENAME = "jangle_chat.log";
 
-    public static void startServer(String jangle_app_password, int port) {
+    public static void startServer(int port) {
         ExecutorService pool = new ThreadPoolExecutor(
             2,
             1000,
@@ -41,15 +42,24 @@ public class ServerMode {
             new LinkedBlockingQueue<>()
         );
         Set<UserHandle> activeUsers = ConcurrentHashMap.newKeySet(100);
+        Server server;
+
+        try {
+            server = Server.createTcpServer().start();
+        }
+        catch (SQLException sqle){
+            System.err.println("ERROR: could not start embedded database server");
+            return;
+        }
 
         try (
                 ServerSocket serverSocket = new ServerSocket(port);
                 PrintWriter serverLog = new PrintWriter(new FileOutputStream(SERVER_LOG_FILENAME), true);
                 PrintWriter chatLog = new PrintWriter(new FileOutputStream(CHAT_lOG_FILENAME), true);
                 Connection conn = DriverManager.getConnection(
-                    "jdbc:postgresql://localhost:5432/jangle_app",
-                    "jangle_app",
-                    jangle_app_password
+                    "jdbc:h2:file:./jangle_app",
+                    "sa",
+                    ""
                 );
             ) {
             conn.setAutoCommit(true);
@@ -65,8 +75,8 @@ public class ServerMode {
             try (Statement stmt = conn.createStatement()) {
                 String sql =
                     "CREATE TABLE IF NOT EXISTS jangle_user " +
-                    "(user_id   INT     PRIMARY KEY GENERATED ALWAYS AS IDENTITY " +
-                        "(START WITH 1000 INCREMENT BY 1), " +
+                    "(user_id   INT     GENERATED ALWAYS AS IDENTITY " +
+                        "(START WITH 1000 INCREMENT BY 1) PRIMARY KEY, " +
                     " ip        TEXT    UNIQUE NOT NULL, " +
                     " name      TEXT    NOT NULL) ";
                 stmt.execute(sql);
@@ -86,8 +96,8 @@ public class ServerMode {
             try (Statement stmt = conn.createStatement()) {
                 String sql =
                     "CREATE TABLE IF NOT EXISTS jangle_chat " +
-                    "(chat_id   INT     PRIMARY KEY GENERATED ALWAYS AS IDENTITY " +
-                        "(START WITH 1 INCREMENT BY 1), " +
+                    "(chat_id   INT     GENERATED ALWAYS AS IDENTITY " +
+                        "(START WITH 1 INCREMENT BY 1) PRIMARY KEY, " +
                     " time      TEXT    NOT NULL, " +
                     " ip        TEXT    NOT NULL, " +
                     " body      TEXT    NOT NULL, " +
@@ -103,9 +113,10 @@ public class ServerMode {
         } catch (IOException ioe) {
             System.err.println("ERROR: could not establish server");
         } catch (SQLException sqle) {
-            System.err.println("ERROR: could not connect to Postgres server");
+            System.err.println("ERROR: could not connect to H2 Database server");
         } finally {
             pool.shutdownNow();
+            server.stop();
             System.out.println();
         }
     }
@@ -169,14 +180,46 @@ public class ServerMode {
             }
 
             try {
+                boolean exists;
                 String sql =
-                    "INSERT INTO jangle_user (ip, name) VALUES(?, ?) " +
-                    "ON CONFLICT (ip) DO " +
-                        "UPDATE SET name = EXCLUDED.name";
+                    "SELECT COUNT(*) " +
+                    "FROM jangle_user " +
+                    "WHERE ip = ?";
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                     stmt.setString(1, user.getIP().toString());
-                    stmt.setString(2, user.getName());
-                    stmt.execute();
+                    
+                    try (ResultSet result = stmt.executeQuery()) {
+                        result.next();
+                        int count = result.getInt(1);
+
+                        if (count == 0){
+                            exists = false;
+                        }
+                        else {
+                            exists = true;
+                        }
+                    }
+                }
+                
+                if (exists){
+                    sql =
+                        "UPDATE jangle_user " +
+                        "SET name = ? " +
+                        "WHERE ip = ?";
+                    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                        stmt.setString(1, user.getName());
+                        stmt.setString(2, user.getIP().toString());
+                        stmt.execute();
+                    }
+                }
+                else {
+                    sql =
+                        "INSERT INTO jangle_user (ip, name) VALUES(?, ?)";
+                    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                        stmt.setString(1, user.getIP().toString());
+                        stmt.setString(2, user.getName());
+                        stmt.execute();
+                    }
                 }
 
                 sql =

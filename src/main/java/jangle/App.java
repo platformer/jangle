@@ -20,13 +20,13 @@ public class App
             printHelp();
         }
         else if (args[0].equals("server")) {
-            if (args.length != 2) {
+            if (args.length != 1) {
                 System.err.println("ERROR: wrong number of arguments");
                 printHelp();
                 return;
             }
 
-            ServerMode.startServer(args[1], DEFAULT_PORT_NUMBER);
+            ServerMode.startServer(DEFAULT_PORT_NUMBER);
         }
         else if (args[0].equals("chat")) {
             if (args.length != 3) {
@@ -60,8 +60,8 @@ public class App
     // prints help message
     private static void printHelp() {
         System.out.println("Valid Commands:");
-        System.out.println("server <jangle_app password>  (start a server)");
-        System.out.println("chat <hostname> <name>        (connect to server at <hostname> with username <name>)");
-        System.out.println("-h | --help | help            (print help message)");
+        System.out.println("server                      (start a server)");
+        System.out.println("chat <hostname> <name>      (connect to server at <hostname> with username <name>)");
+        System.out.println("-h | --help | help          (print help message)");
     }
 }
