@@ -25,7 +25,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.h2.tools.Server;
 import org.javatuples.Quartet;
 import org.javatuples.Triplet;
 
@@ -49,15 +48,6 @@ public class ServerMode {
             new LinkedBlockingQueue<>()
         );
         Set<UserHandle> activeUsers = ConcurrentHashMap.newKeySet(100);
-        Server server;
-
-        try {
-            server = Server.createTcpServer().start();
-        }
-        catch (SQLException sqle){
-            System.err.println("ERROR: could not start embedded database server");
-            return;
-        }
 
         try (
                 ServerSocket serverSocket = new ServerSocket(port);
@@ -123,7 +113,6 @@ public class ServerMode {
             System.err.println("ERROR: could not connect to H2 Database server");
         } finally {
             pool.shutdownNow();
-            server.stop();
             System.out.println();
         }
     }
