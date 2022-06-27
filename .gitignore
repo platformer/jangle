@@ -28,8 +28,8 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-### Redis ###
-**.rdb
+### Postgres ###
+**/logfile
 
 ### Miscellaneous ###
 test/

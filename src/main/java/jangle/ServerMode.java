@@ -8,12 +8,16 @@ import java.io.PrintWriter;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -21,8 +25,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.javatuples.Pair;
+import org.h2.tools.Server;
 import org.javatuples.Quartet;
+import org.javatuples.Triplet;
 
 import io.lettuce.core.Range;
 import io.lettuce.core.RedisClient;
@@ -32,46 +37,111 @@ import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 
 public class ServerMode {
-    private static final String SERVER_LOG_FILENAME = "JANGLE_SERVER.log";
-    private static final String CHAT_LOG_FILENAME = "JANGLE_CHAT.LOG";
-    private static final String CHAT_LOG_KEY = "JANGLE_CHAT_LOG";
-    private static final String USER_NAME_KEY = "user";
-    private static final String USER_ID_KEY = "id";
-    private static final String MSG_IP_ADDR_KEY = "IP_ADDR";
-    private static final String MSG_TIME_KEY = "INSTANT";
-    private static final String MSG_BODY_KEY = "BODY";
-    public static final int NUM_MESSAGES_PER_CHUNK = 50;
+    private static final String SERVER_LOG_FILENAME = "jangle_server.log";
+    private static final String CHAT_lOG_FILENAME = "jangle_chat.log";
 
     public static void startServer(int port) {
-        ExecutorService pool = new ThreadPoolExecutor(2, 100, 1, TimeUnit.HOURS, new LinkedBlockingQueue<>());
-        RedisClient redisClient = RedisClient.create("redis://password@localhost:6379/0");
-        StatefulRedisConnection<String, String> redisConnection = redisClient.connect();
-        RedisCommands<String, String> syncCommands = redisConnection.sync();
+        ExecutorService pool = new ThreadPoolExecutor(
+            2,
+            1000,
+            App.USER_KEEPALIVE_MINUTES,
+            TimeUnit.MINUTES,
+            new LinkedBlockingQueue<>()
+        );
         Set<UserHandle> activeUsers = ConcurrentHashMap.newKeySet(100);
+        Server server;
+
+        try {
+            server = Server.createTcpServer().start();
+        }
+        catch (SQLException sqle){
+            System.err.println("ERROR: could not start embedded database server");
+            return;
+        }
 
         try (
                 ServerSocket serverSocket = new ServerSocket(port);
                 PrintWriter serverLog = new PrintWriter(new FileOutputStream(SERVER_LOG_FILENAME), true);
-                PrintWriter chatLog = new PrintWriter(new FileOutputStream(CHAT_LOG_FILENAME), true);
+                PrintWriter chatLog = new PrintWriter(new FileOutputStream(CHAT_lOG_FILENAME), true);
+                Connection conn = DriverManager.getConnection(
+                    "jdbc:h2:file:./jangle_app",
+                    "sa",
+                    ""
+                );
             ) {
-            run(serverSocket, pool, syncCommands, activeUsers, serverLog, chatLog);
+            conn.setAutoCommit(true);
+
+            try (Statement stmt = conn.createStatement()) {
+                String sql = "DROP TABLE IF EXISTS jangle_user CASCADE";
+                stmt.execute(sql);
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Failed to drop old jangle_user table");
+                return;
+            }
+
+            try (Statement stmt = conn.createStatement()) {
+                String sql =
+                    "CREATE TABLE IF NOT EXISTS jangle_user " +
+                    "(user_id   INT     GENERATED ALWAYS AS IDENTITY " +
+                        "(START WITH 1000 INCREMENT BY 1) PRIMARY KEY, " +
+                    " ip        TEXT    UNIQUE NOT NULL, " +
+                    " name      TEXT    NOT NULL) ";
+                stmt.execute(sql);
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Failed to create jangle_user table");
+                return;
+            }
+
+            try (Statement stmt = conn.createStatement()) {
+                String sql = "DROP TABLE IF EXISTS jangle_chat";
+                stmt.execute(sql);
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Failed to drop old jangle_chat table");
+                return;
+            }
+
+            try (Statement stmt = conn.createStatement()) {
+                String sql =
+                    "CREATE TABLE IF NOT EXISTS jangle_chat " +
+                    "(chat_id   INT     GENERATED ALWAYS AS IDENTITY " +
+                        "(START WITH 1 INCREMENT BY 1) PRIMARY KEY, " +
+                    " time      TEXT    NOT NULL, " +
+                    " ip        TEXT    NOT NULL, " +
+                    " body      TEXT    NOT NULL, " +
+                    " FOREIGN KEY(ip) REFERENCES jangle_user(ip) " +
+                        "ON DELETE CASCADE)";
+                stmt.execute(sql);
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Failed to create jangle_chat table");
+                return;
+            }
+            
+            run(serverSocket, conn, pool, activeUsers, serverLog, chatLog);
         } catch (IOException ioe) {
             System.err.println("ERROR: could not establish server");
+        } catch (SQLException sqle) {
+            System.err.println("ERROR: could not connect to H2 Database server");
         } finally {
             pool.shutdownNow();
-            redisConnection.close();
-            redisClient.shutdown();
+            server.stop();
+            System.out.println();
+        }
+    }
+
+    private static void sendMessageToUser(UserHandle user, ServerMessage message) throws IOException{
+        ObjectOutputStream out = user.getObjectOutputStream();
+        synchronized (out){
+            out.writeObject(message);
+            out.flush();
         }
     }
 
     private static void run(
             ServerSocket serverSocket,
+            Connection conn,
             ExecutorService pool,
-            RedisCommands<String, String> syncCommands,
             Set<UserHandle> activeUsers,
-            PrintWriter serverLog, PrintWriter chatLog) {
-        DateTimeFormatter chatDateFormat = DateTimeFormatter.ofPattern("MM/dd/yy HH:mm");
-
+            PrintWriter serverLog, PrintWriter chatlog) {
         while (true) {
             Socket s;
             try {
@@ -89,23 +159,19 @@ public class ServerMode {
 
             if (activeUsers.contains(user)) {
                 try {
-                    ServerMessage rejectConnectionMessage = new ServerMessage(
-                            ServerMessage.ServerMessageType.DisconnectDuplicate, true);
-                    user.getObjectOutputStream().writeObject(rejectConnectionMessage);
-                    user.getObjectOutputStream().flush();
+                    ServerMessage rejectConnectionMessage = new ServerMessage(ServerMessage.ServerMessageType.DisconnectDuplicate, true);
+                    sendMessageToUser(user, rejectConnectionMessage);
                     user.deactivate();
                 } catch (IOException ioe) {}
                 serverLog.println(Instant.now() + " : Closing duplicate connection from " + ip.toString() + " port " + s.getPort());
                 continue;
-            } else {
-                serverLog.println(Instant.now() + " : User from " + ip.toString() + " is new - id set to " + user.getID());
             }
 
             try {
                 ServerMessage acceptConnectionMessage = new ServerMessage(ServerMessage.ServerMessageType.DisconnectDuplicate, false);
-                user.getObjectOutputStream().writeObject(acceptConnectionMessage);
-                user.getObjectOutputStream().flush();
-            } catch (IOException ioe) {
+                sendMessageToUser(user, acceptConnectionMessage);
+            }
+            catch (IOException ioe){
                 serverLog.println(Instant.now() + " : Failed to accept connection from user " + user.getID());
                 user.deactivate();
                 continue;
@@ -120,87 +186,90 @@ public class ServerMode {
                 continue;
             }
 
-            Map<String, String> userInfo = new HashMap<>();
-            userInfo.put(USER_NAME_KEY, user.getName());
-            userInfo.put(USER_ID_KEY, "" + user.getID());
-            syncCommands.hset(user.getIP().toString(), userInfo);
+            try {
+                boolean exists;
+                String sql =
+                    "SELECT COUNT(*) " +
+                    "FROM jangle_user " +
+                    "WHERE ip = ?";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setString(1, user.getIP().toString());
+                    
+                    try (ResultSet result = stmt.executeQuery()) {
+                        result.next();
+                        int count = result.getInt(1);
+
+                        if (count == 0){
+                            exists = false;
+                        }
+                        else {
+                            exists = true;
+                        }
+                    }
+                }
+                
+                if (exists){
+                    sql =
+                        "UPDATE jangle_user " +
+                        "SET name = ? " +
+                        "WHERE ip = ?";
+                    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                        stmt.setString(1, user.getName());
+                        stmt.setString(2, user.getIP().toString());
+                        stmt.execute();
+                    }
+                }
+                else {
+                    sql =
+                        "INSERT INTO jangle_user (ip, name) VALUES(?, ?)";
+                    try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                        stmt.setString(1, user.getIP().toString());
+                        stmt.setString(2, user.getName());
+                        stmt.execute();
+                    }
+                }
+
+                sql =
+                    "SELECT user_id " +
+                    "FROM jangle_user " +
+                    "WHERE ip = ?";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setString(1, user.getIP().toString());
+                    
+                    try (ResultSet idResult = stmt.executeQuery()) {
+                        idResult.next();
+                        user.setID(idResult.getInt(1));
+                    }
+                }
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Could add/update user " + user.getID() + " in database - closing connection");
+                user.deactivate();
+                continue;
+            }
+
+            serverLog.println(Instant.now() + " : Connection from " + ip.toString() + " port " + s.getPort()
+                + " recognized as user " + user.getID());
+
+            try {
+                ServerMessage idMessage = new ServerMessage(ServerMessage.ServerMessageType.ID, user.getID());
+                sendMessageToUser(user, idMessage);
+            }
+            catch (IOException ioe){
+                serverLog.println(Instant.now() + " : Failed to send ID to user " + user.getID() + " - closing connection");
+                user.deactivate();
+                continue;
+            }
 
             activeUsers.add(user);
-            pool.execute(() -> sendChatLogChunk(user, syncCommands.xlen(CHAT_LOG_KEY), -50, syncCommands, serverLog));
-            pool.execute(() -> listen(user, chatDateFormat, pool, syncCommands, activeUsers, serverLog, chatLog));
-        }
-    }
-
-    private static void sendChatLogChunk(
-            UserHandle user,
-            long curMessageNum,
-            int numMessages,
-            RedisCommands<String, String> syncCommands,
-            PrintWriter serverLog) {
-        if ((curMessageNum == 0 && numMessages < 0)
-            || (!user.isDetached() && numMessages > 0)){
-            return;
-        }
-        
-        Map<String, Pair<String, Integer>> userMap = new HashMap<>();
-        List<StreamMessage<String, String>> streamMessages;
-        long lastMessageNum;
-        
-        if (numMessages < 0){
-            streamMessages = syncCommands.xrange(CHAT_LOG_KEY, Range.create("" + (curMessageNum - 50), "" + curMessageNum));
-            lastMessageNum = curMessageNum - 50;
-        }
-        else {
-            streamMessages = syncCommands.xrange(CHAT_LOG_KEY, Range.create("" + curMessageNum, "" + (curMessageNum + 50)));
-            lastMessageNum = curMessageNum + 50;
-        }
-
-        long numTotMessages = syncCommands.xlen(CHAT_LOG_KEY);
-
-        if (lastMessageNum < numTotMessages){
-            user.setDetached(true);
-        }
-        else {
-            user.setDetached(false);
-        }
-
-        List<Quartet<Instant, String, Integer, String>> chunk = new ArrayList<>();
-
-        for (int i = 0; i < streamMessages.size(); i++){
-            Map<String, String> msg = streamMessages.get(i).getBody();
-            String ip = msg.get(MSG_IP_ADDR_KEY);
-            String time = msg.get(MSG_TIME_KEY);
-            String body = msg.get(MSG_BODY_KEY);
-            String username;
-            Integer id;
-            
-            if (userMap.containsKey(ip)){
-                Pair<String, Integer> userDesc = userMap.get(ip);
-                username = userDesc.getValue0();
-                id = userDesc.getValue1();
-            }
-            else {
-                Map<String, String> userDesc = syncCommands.hgetall(ip);
-                username = userDesc.get(USER_NAME_KEY);
-                id = Integer.parseInt(userDesc.get(USER_ID_KEY));
-                userMap.put(ip, new Pair<String,Integer>(username, id));
-            }
-
-            chunk.add(new Quartet<Instant,String,Integer,String>(Instant.parse(time), username, id, body));
-        }
-
-        try {
-            user.getObjectOutputStream().writeObject(chunk);
-        } catch (IOException ioe) {
-            serverLog.println(Instant.now() + " : Failed to send chunk to user " + user.getID());
+            pool.execute(() -> sendMostRecentChatChunk(user, App.NUM_MESSAGES_PER_CHUNK, conn, serverLog));
+            pool.execute(() -> listen(user, conn, pool, activeUsers, serverLog, chatlog));
         }
     }
 
     private static void listen(
             UserHandle user,
-            DateTimeFormatter dateFormat,
+            Connection conn,
             ExecutorService pool,
-            RedisCommands<String, String> syncCommands,
             Set<UserHandle> activeUsers,
             PrintWriter serverLog, PrintWriter chatLog) {
         ObjectInputStream in = user.getObjectInputStream();
@@ -217,43 +286,229 @@ public class ServerMode {
                 return;
             }
 
-            switch (serializedMessage.getType()) {
-                case Chat:
-                    Instant receiveTime = Instant.now();
-                    String message = (String) serializedMessage.getPayload();
-                    serverLog.println(receiveTime + " : Received message from user " + user.getID());
-                    Quartet<Instant, String, Integer, String> payload = new Quartet<>(
-                            receiveTime,
-                            user.getName(),
-                            user.getID(),
-                            message);
-                    ServerMessage outgoingMessage = new ServerMessage(ServerMessage.ServerMessageType.Chat, payload);
-                    pool.execute(() -> disseminate(outgoingMessage, activeUsers, serverLog));
+            if (serializedMessage.getType() == UserMessage.UserMessageType.Chat) {
+                Instant receiveTime = Instant.now();
+                String message = (String) serializedMessage.getPayload();
 
-                    long numMessages = syncCommands.xlen(CHAT_LOG_KEY);
-                    Map<String, String> messageMap = new HashMap<>();
-                    messageMap.put(MSG_TIME_KEY, receiveTime.toString());
-                    messageMap.put(MSG_IP_ADDR_KEY, user.getIP().toString());
-                    messageMap.put(MSG_BODY_KEY, message);
-                    syncCommands.xadd(CHAT_LOG_KEY, new XAddArgs().id(numMessages + 1 + ""), messageMap);
+                if (message.length() > App.MAX_CHARS_PER_MESSAGE){
+                    continue;
+                }
 
-                    chatLog.println(receiveTime + " " + user.getName() + " " + user.getID() + "\n" + message);
-                    break;
+                message = message.replaceAll("\\s", " ").trim();
+                serverLog.println(receiveTime + " : Received message from user " + user.getID());
+                Quartet<Instant, String, Integer, String> payload = new Quartet<>(
+                    receiveTime,
+                    user.getName(),
+                    user.getID(),
+                    message
+                );
 
-                default:
+                String sql = "INSERT INTO jangle_chat (time, ip, body) VALUES(?, ?, ?)";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)){
+                    stmt.setString(1, receiveTime.toString());
+                    stmt.setString(2, user.getIP().toString());
+                    stmt.setString(3, message);
+                    stmt.execute();
+                } catch (SQLException sqle){
+                    serverLog.println(Instant.now() + " : Could not commit message to database");
+                    return;
+                }
+
+                ServerMessage outgoingMessage = new ServerMessage(ServerMessage.ServerMessageType.Chat, payload);
+                pool.execute(() -> disseminate(outgoingMessage, activeUsers, serverLog));
+                chatLog.println(receiveTime + " " + user.getName() + " " + user.getID() + "\n" + message);
+
+                synchronized (user){
+                    if (user.getDetached()){
+                        pool.execute(() -> sendMostRecentChatChunk(user, App.NUM_MESSAGES_PER_CHUNK, conn, serverLog));
+                    }
+                }
+            }
+            else if (serializedMessage.getType() == UserMessage.UserMessageType.RequestOldMessages ||
+                     serializedMessage.getType() == UserMessage.UserMessageType.RequestNewMessages){
+                Instant currChatChunkRequestTime = Instant.now();
+                if (Duration.between(user.getLastChatChunkRequestTime(), currChatChunkRequestTime).getSeconds()
+                    < App.SECONDS_BETWEEN_CHUNK_REQUESTS){
+                    continue;
+                }
+
+                UserMessage.UserMessageType msgType = serializedMessage.getType();
+
+                user.setLastChatChunkRequestTime(currChatChunkRequestTime);
+                pool.execute(() -> sendChatChunk(
+                    user,
+                    (Integer) serializedMessage.getPayload(),
+                    App.NUM_MESSAGES_PER_CHUNK * (msgType == UserMessage.UserMessageType.RequestOldMessages? -1 : 1),
+                    conn,
+                    serverLog
+                ));
             }
         }
     }
 
+    private static void sendMostRecentChatChunk(
+            UserHandle user,
+            int numMessages,
+            Connection conn,
+            PrintWriter serverLog) {
+        synchronized (user){
+            Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> chatChunk;
+
+            String sql =
+                "SELECT * FROM (" +
+                    "SELECT " +
+                        "jangle_chat.chat_id AS chat_id, " +
+                        "jangle_chat.time AS time, " +
+                        "jangle_user.name AS name, " +
+                        "jangle_user.user_id AS user_id, " +
+                        "jangle_chat.body AS body " +
+                    "FROM jangle_chat, jangle_user " +
+                    "WHERE jangle_chat.ip = jangle_user.ip " +
+                    "ORDER BY chat_id DESC LIMIT ?) AS jangle_app_chat_chunk " +
+                "ORDER BY chat_id ASC";
+
+            try (PreparedStatement chatChunkStmt = conn.prepareStatement(sql)){
+                chatChunkStmt.setInt(1, App.NUM_MESSAGES_PER_CHUNK);
+
+                try (ResultSet chatChunkResults = chatChunkStmt.executeQuery()){
+                    chatChunk = buildChunkMessage(chatChunkResults, true);
+                }
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Could not read chat messages in database");
+                return;
+            }
+
+            try {
+                sendMessageToUser(user, new ServerMessage(ServerMessage.ServerMessageType.RecentChatChunk, chatChunk));
+            } catch (IOException e) {
+                serverLog.println(Instant.now() + " : Could not send chat chunk to user " + user.getID());
+            }
+
+            user.setDetached(false);
+        }
+    }
+
+    private static void sendChatChunk(
+            UserHandle user,
+            int curMessageNum,
+            int numMessages,
+            Connection conn,
+            PrintWriter serverLog) {
+        synchronized (user){
+            if ((!user.getDetached() && numMessages > 0)
+                || numMessages == 0
+                || curMessageNum <= 1
+            ){
+                return;
+            }
+
+            int firstMessageNum;
+            int lastMessageNum;
+
+            if (numMessages < 0){
+                firstMessageNum = curMessageNum + numMessages;
+                lastMessageNum = curMessageNum - 1;
+            }
+            else {
+                firstMessageNum = curMessageNum + 1;
+                lastMessageNum = curMessageNum + numMessages;
+            }
+
+            int chatLength = 0;
+
+            try (Statement chatLengthStmt = conn.createStatement()){
+                String sql = "SELECT MAX (chat_id) FROM jangle_chat";
+
+                try (ResultSet chatLengthResults = chatLengthStmt.executeQuery(sql)) {
+                    chatLengthResults.next();
+                    chatLength = chatLengthResults.getInt(1);
+                }
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Could not read chat length from database");
+                return;
+            }
+
+            Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> chatChunk;
+            
+            String sql =
+                "SELECT " +
+                    "jangle_chat.chat_id AS chat_id, " +
+                    "jangle_chat.time AS time, " +
+                    "jangle_user.name AS name, " +
+                    "jangle_user.user_id AS user_id, " +
+                    "jangle_chat.body AS body " +
+                "FROM jangle_chat, jangle_user " +
+                "WHERE " +
+                    "jangle_chat.ip = jangle_user.ip AND " +
+                    "jangle_chat.chat_id >= ? AND " +
+                    "jangle_chat.chat_id <= ? " +
+                "ORDER BY chat_id ASC";
+            
+            try (PreparedStatement chatChunkStmt = conn.prepareStatement(sql)){
+                chatChunkStmt.setInt(1, firstMessageNum);
+                chatChunkStmt.setInt(2, lastMessageNum);
+
+                try (ResultSet chatChunkResults = chatChunkStmt.executeQuery()){
+                    chatChunk = buildChunkMessage(chatChunkResults, false);
+                }
+            } catch (SQLException sqle){
+                serverLog.println(Instant.now() + " : Could not read chat messages in database");
+                return;
+            }
+
+            try {
+                sendMessageToUser(user, new ServerMessage(ServerMessage.ServerMessageType.ChatChunk, chatChunk));
+            } catch (IOException e) {
+                serverLog.println(Instant.now() + " : Could not send chat chunk to user " + user.getID());
+            }
+
+            if (chatChunk.getValue1() >= chatLength){
+                user.setDetached(false);
+            }
+            else {
+                user.setDetached(true);
+            }
+        }
+    }
+
+    private static Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>
+    buildChunkMessage(ResultSet chatChunkResults, boolean isRecentChunk) throws SQLException{
+        int chunkFirstMessageNum = isRecentChunk? 1 : 0;
+        int chunkLastMessageNum = 0;
+        List<Quartet<Instant, String, Integer, String>> messages = new ArrayList<>();
+
+        while (chatChunkResults.next()){
+            if (chatChunkResults.isFirst()){
+                chunkFirstMessageNum = chatChunkResults.getInt("chat_id");
+            }
+            if (chatChunkResults.isLast()){
+                chunkLastMessageNum = chatChunkResults.getInt("chat_id");
+            }
+
+            messages.add(new Quartet<Instant,String,Integer,String>(
+                Instant.parse(chatChunkResults.getString("time")),
+                chatChunkResults.getString("name"),
+                chatChunkResults.getInt("user_id"),
+                chatChunkResults.getString("body")
+            ));
+        }
+
+        return new Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>>(
+            chunkFirstMessageNum,
+            chunkLastMessageNum,
+            messages
+        );
+    }
+
     private static void disseminate(ServerMessage message, Set<UserHandle> activeUsers, PrintWriter serverLog) {
         for (UserHandle user : activeUsers) {
-            if (!user.isDetached()) {
-                try {
-                    ObjectOutputStream out = user.getObjectOutputStream();
-                    out.writeObject(message);
-                    out.flush();
-                } catch (IOException ioe) {
-                    serverLog.println(Instant.now() + " : Failed to send message to user " + user.getID());
+            synchronized (user){
+                if (!user.getDetached()){
+                    try {
+                        sendMessageToUser(user, message);
+                    } catch (IOException ioe) {
+                        serverLog.println(Instant.now() + " : Failed to send message to user " + user.getID());
+                    }
                 }
             }
         }
