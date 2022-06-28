@@ -308,7 +308,7 @@ public class ServerMode {
                 chunkFirstMessageNum = Integer.parseInt(msgComponents[2]) + 1;
             }
             if (i == queryResults.size() - 1){
-                chunkFirstMessageNum = Integer.parseInt(msgComponents[2]) + 1;
+                chunkLastMessageNum = Integer.parseInt(msgComponents[2]) + 1;
             }
 
             messages.add(new Quartet<Instant,String,Integer,String>(
