@@ -361,7 +361,7 @@ public class ServerMode {
                 "ORDER BY chat_id ASC";
 
             try (PreparedStatement chatChunkStmt = conn.prepareStatement(sql)){
-                chatChunkStmt.setInt(1, App.NUM_MESSAGES_PER_CHUNK);
+                chatChunkStmt.setInt(1, numMessages);
 
                 try (ResultSet chatChunkResults = chatChunkStmt.executeQuery()){
                     chatChunk = buildChunkMessage(chatChunkResults, true);
