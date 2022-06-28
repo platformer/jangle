@@ -31,6 +31,9 @@ bin/
 ### Postgres ###
 **/logfile
 
+### Redis ###
+**/*.rdb
+
 ### Miscellaneous ###
 test/
 

@@ -36,7 +36,7 @@ public class ServerMode {
     private static final String REDIS_USER_NAME_FIELD = "user_name";
     private static final String REDIS_NUM_USERS_KEY = "num_users";
 
-    public static void startServer(int port) {
+    public static void startServer(int port, String redis_pass) {
         ExecutorService pool = new ThreadPoolExecutor(
             2,
             1000,
@@ -45,7 +45,7 @@ public class ServerMode {
             new LinkedBlockingQueue<>()
         );
         Set<UserHandle> activeUsers = ConcurrentHashMap.newKeySet(100);
-        RedisClient redisClient = RedisClient.create("redis://password@localhost:6379/0");
+        RedisClient redisClient = RedisClient.create("redis://" + redis_pass + "@localhost:6379/0");
 
         try (
                 ServerSocket serverSocket = new ServerSocket(port);
