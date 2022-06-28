@@ -12,4 +12,5 @@ To connect to an existing server, run the following command:
 
 ## Notes
 *   You can try to run a server in Windows, but due to Windows' default firewall settings, users will not be able to connect to your server. It is definitely possible to get it working, but you will have to fiddle with your Windows settings. If you wish to try, look into allowing other PCs to connect to yours via TCP.
-*   You can find a version of this project that uses Postgres for its internal database [here](https://github.com/platformer/jangle/tree/dev-postgres)
+*   You can find a version of this project that uses Postgres for its internal database [here](https://github.com/platformer/jangle/tree/dev-postgres).
+*   You can find a version of this project that uses Redis for its internal database [here](https://github.com/platformer/jangle/tree/dev-redis).
