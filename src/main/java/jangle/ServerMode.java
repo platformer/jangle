@@ -54,6 +54,7 @@ public class ServerMode {
                 StatefulRedisConnection<String, String> conn = redisClient.connect();
             ) {
             RedisCommands<String, String> syncCommands = conn.sync();
+            syncCommands.flushdb();
             syncCommands.set(REDIS_NUM_USERS_KEY, "" + 0);
             run(serverSocket, syncCommands, pool, activeUsers, serverLog, chatLog);
         } catch (IOException ioe) {
@@ -130,7 +131,7 @@ public class ServerMode {
                 Map<String, String> tempMap = new HashMap<>();
                 tempMap.put(REDIS_USER_NAME_FIELD, user.getName());
                 int numUsers = Integer.parseInt(syncCommands.get(REDIS_NUM_USERS_KEY)) + 1;
-                tempMap.put(REDIS_USER_ID_FIELD, "" + numUsers + 999);
+                tempMap.put(REDIS_USER_ID_FIELD, "" + (numUsers + 999));
                 syncCommands.hset(ip.toString(), tempMap);
                 syncCommands.set(REDIS_NUM_USERS_KEY, "" + numUsers);
                 user.setID(numUsers + 999);
@@ -276,7 +277,7 @@ public class ServerMode {
             long chatLength = syncCommands.llen(REDIS_CHAT_LIST_KEY);
             Triplet<Integer, Integer, List<Quartet<Instant, String, Integer, String>>> chatChunk;
             List<String> messages = syncCommands.lrange(REDIS_CHAT_LIST_KEY, firstMessageNum - 1, lastMessageNum - 1);
-            chatChunk = buildChunkMessage(syncCommands, messages, true);
+            chatChunk = buildChunkMessage(syncCommands, messages, false);
 
             try {
                 sendMessageToUser(user, new ServerMessage(ServerMessage.ServerMessageType.ChatChunk, chatChunk));
@@ -301,18 +302,18 @@ public class ServerMode {
 
         for (int i = 0; i < queryResults.size(); i++){
             String message = queryResults.get(i);
-            String[] msgComponents = message.split(" ", 3);
+            String[] msgComponents = message.split(" ", 4);
 
             if (i == 0){
-                chunkFirstMessageNum = Integer.parseInt(msgComponents[2]);
+                chunkFirstMessageNum = Integer.parseInt(msgComponents[2]) + 1;
             }
             if (i == queryResults.size() - 1){
-                chunkFirstMessageNum = Integer.parseInt(msgComponents[2]);
+                chunkFirstMessageNum = Integer.parseInt(msgComponents[2]) + 1;
             }
 
             messages.add(new Quartet<Instant,String,Integer,String>(
                 Instant.parse(msgComponents[0]),
-                msgComponents[1],
+                syncCommands.hget(msgComponents[1], REDIS_USER_NAME_FIELD),
                 Integer.parseInt(syncCommands.hget(msgComponents[1], REDIS_USER_ID_FIELD)),
                 msgComponents[3]
             ));
