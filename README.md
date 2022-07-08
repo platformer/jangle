@@ -53,7 +53,7 @@ This is a terminal chat program written entirely in Java. You can either host a 
     
     You should now be able to run the command at the beginning of this step and login to the database. Logout with `Ctrl+D`.
 
-9.  You're done setting up Postgres! Now, download the jar file for Jangle [here](https://github.com/platformer/jangle/blob/519c54cdcbc45ac6a7e47a78901d06fd348a9c91/target/jangle-1.0.jar). Consult the Usage section for running the jar.
+9.  You're done setting up Postgres! Now, download the jar file for Jangle [here](https://github.com/platformer/jangle/blob/dev-postgres/target/jangle-1.0.jar). Consult the Usage section for running the jar.
 
 ### Notes
 *   You can try to replicate the above setup process within Windows, but due to Windows' default firewall settings, users will not be able to connect to your server. The steps for setting up Postgres will also likely be somewhat different. It is definitely possible to get it working, but you will have to fiddle with your Windows settings. If you wish to try, look into allowing other PCs to connect to yours via TCP.
