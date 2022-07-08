@@ -128,6 +128,7 @@ public class ServerMode {
             Socket s;
             try {
                 s = serverSocket.accept();
+                s.setTcpNoDelay(true);
             } catch (IOException ioe) {
                 serverLog.println(Instant.now() + " : Failed to accept incoming connection");
                 continue;

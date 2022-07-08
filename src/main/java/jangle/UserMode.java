@@ -36,6 +36,7 @@ public class UserMode {
         
         try {
             s = new Socket(host, port);
+            s.setTcpNoDelay(true);
             out = new ObjectOutputStream(s.getOutputStream());
             in = new ObjectInputStream(s.getInputStream());
         } catch (IOException ioe) {
