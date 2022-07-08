@@ -15,7 +15,7 @@ This is a terminal chat program written entirely in Java. You can either host a 
     127.0.0.1:6379> AUTH <password>
     127.0.0.1:6379> shutdown
     ```
-9.  You're done setting up Redis! Now, download the jar file for Jangle [here](https://github.com/platformer/jangle/blob/1f1af9ed79b9e0e6b712e7451d70099da52e8c2b/target/jangle-1.0.jar). Consult the Usage section for running the jar.
+9.  You're done setting up Redis! Now, download the jar file for Jangle [here](https://github.com/platformer/jangle/blob/dev-redis/target/jangle-1.0.jar). Consult the Usage section for running the jar.
 
 ### Notes
 *   You can try to replicate the above setup process within Windows, but due to Windows' default firewall settings, users will not be able to connect to your server. It is definitely possible to get it working, but you will have to fiddle with your Windows settings. If you wish to try, look into allowing other PCs to connect to yours via TCP.
