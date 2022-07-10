@@ -22,7 +22,7 @@ public class MessageEditorTextBox extends TextBox {
 
     @Override
     public synchronized Result handleKeyStroke(KeyStroke keyStroke) {
-        if (isBlocked){
+        if (isBlocked) {
             return Result.HANDLED;
         }
 
@@ -30,24 +30,24 @@ public class MessageEditorTextBox extends TextBox {
             if (!getText().equals("")) {
                 String message = getText();
 
-                if (message.length() > App.MAX_CHARS_PER_MESSAGE){
+                if (message.length() > App.MAX_CHARS_PER_MESSAGE) {
                     Timer timer = new Timer();
                     setText("<Too long! Message is " + message.length() + " characters, " +
-                        "max is " + App.MAX_CHARS_PER_MESSAGE + ">");
+                            "max is " + App.MAX_CHARS_PER_MESSAGE + ">");
                     isBlocked = true;
                     timer.schedule(new TimerTask() {
                         @Override
-                        public void run(){
+                        public void run() {
                             restoreText(message);
                         }
-                    }, App.POPUP_TIMOUT_MILLIS);
+                    }, App.POPUP_TIMEOUT_MILLIS);
                     return Result.HANDLED;
                 }
 
                 UserMessage serializedMessage = new UserMessage(UserMessage.UserMessageType.Chat, message);
 
                 try {
-                    synchronized (out){
+                    synchronized (out) {
                         out.writeObject(serializedMessage);
                         out.flush();
                     }
@@ -61,25 +61,25 @@ public class MessageEditorTextBox extends TextBox {
             takeFocus();
             return Result.HANDLED;
         }
-        
-        if (keyStroke.getKeyType() == KeyType.ArrowUp){
+
+        if (keyStroke.getKeyType() == KeyType.ArrowUp) {
             String message = getText();
             Timer timer = new Timer();
             setText("<Press Tab to switch between text box and chat window>");
             isBlocked = true;
             timer.schedule(new TimerTask() {
                 @Override
-                public void run(){
+                public void run() {
                     restoreText(message);
                 }
-            }, App.POPUP_TIMOUT_MILLIS);
+            }, App.POPUP_TIMEOUT_MILLIS);
             return Result.HANDLED;
         }
-        
+
         return super.handleKeyStroke(keyStroke);
     }
 
-    private synchronized void restoreText(String text){
+    private synchronized void restoreText(String text) {
         setText(text);
         setCaretPosition(Integer.MAX_VALUE);
         isBlocked = false;

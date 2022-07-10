@@ -8,11 +8,9 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.time.Instant;
 import java.util.Date;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class UserHandle {
     private final InetAddress ip;
-    private final ReentrantLock lock;
     private int id;
     private String name;
     private Socket socket;
@@ -20,12 +18,13 @@ public class UserHandle {
     private ObjectOutputStream serverOut;
     private volatile boolean isDetached;
     private volatile Instant lastChatChunkRequestTime;
+    private volatile Instant lastMessageTime;
 
     public UserHandle(InetAddress ip) {
         this.ip = ip;
-        this.lock = new ReentrantLock(true);
         this.isDetached = true;
-        lastChatChunkRequestTime = Instant.EPOCH;
+        lastChatChunkRequestTime = Instant.now();
+        lastMessageTime = Instant.now();
     }
 
     public void activate(Socket socket, PrintWriter serverLog) {
@@ -64,15 +63,11 @@ public class UserHandle {
         return ip;
     }
 
-    public synchronized ReentrantLock getLock() {
-        return lock;
-    }
-
     public synchronized int getID() {
         return id;
     }
 
-    public void setID(int id){
+    public synchronized void setID(int id){
         this.id = id;
     }
 
@@ -80,7 +75,7 @@ public class UserHandle {
         return name;
     }
 
-    public void setName(String newName) {
+    public synchronized void setName(String newName) {
         name = newName;
     }
 
@@ -110,5 +105,13 @@ public class UserHandle {
 
     public synchronized void setLastChatChunkRequestTime(Instant newChatChunkRequestTime){
         lastChatChunkRequestTime = newChatChunkRequestTime;
+    }
+
+    public synchronized Instant getLastMessageTime() {
+        return lastMessageTime;
+    }
+
+    public synchronized void setLastMessageTime(Instant newLastMessageTime) {
+        lastMessageTime = newLastMessageTime;
     }
 }
