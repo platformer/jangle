@@ -34,13 +34,14 @@ public class ServerMode {
     private static final String CHAT_lOG_FILENAME = "jangle_chat.log";
 
     public static void startServer(int port) {
-        ExecutorService pool = new ThreadPoolExecutor(
-            2,
+        ThreadPoolExecutor pool = new ThreadPoolExecutor(
+            1000,
             1000,
             App.USER_KEEPALIVE_MINUTES,
             TimeUnit.MINUTES,
-            new LinkedBlockingQueue<>()
+            new LinkedBlockingQueue<Runnable>()
         );
+        pool.allowCoreThreadTimeOut(true);
         Set<UserHandle> activeUsers = ConcurrentHashMap.newKeySet(100);
         Server server;
 
