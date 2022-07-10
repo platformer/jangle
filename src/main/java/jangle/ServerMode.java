@@ -37,8 +37,8 @@ public class ServerMode {
         ThreadPoolExecutor pool = new ThreadPoolExecutor(
             1000,
             1000,
-            App.USER_KEEPALIVE_MINUTES,
-            TimeUnit.MINUTES,
+            60,
+            TimeUnit.SECONDS,
             new LinkedBlockingQueue<Runnable>()
         );
         pool.allowCoreThreadTimeOut(true);
@@ -136,6 +136,8 @@ public class ServerMode {
             ExecutorService pool,
             Set<UserHandle> activeUsers,
             PrintWriter serverLog, PrintWriter chatlog) {
+        pool.execute(() -> kickIdleUsers(activeUsers, serverLog));
+
         while (true) {
             Socket s;
             try {
@@ -283,6 +285,7 @@ public class ServerMode {
 
             if (serializedMessage.getType() == UserMessage.UserMessageType.Chat) {
                 Instant receiveTime = Instant.now();
+                user.setLastMessageTime(receiveTime);
                 String message = (String) serializedMessage.getPayload();
 
                 if (message.length() > App.MAX_CHARS_PER_MESSAGE){
@@ -337,6 +340,27 @@ public class ServerMode {
                     conn,
                     serverLog
                 ));
+            }
+        }
+    }
+
+    private static void kickIdleUsers(Set<UserHandle> activeUsers, PrintWriter serverLog) {
+        while (true){
+            try {
+                Thread.sleep(300_000);
+            } catch (InterruptedException e) {}
+
+            Instant time = Instant.now();
+
+            for (UserHandle user : activeUsers){
+                if (Duration.between(user.getLastMessageTime(), time).getSeconds() > App.USER_KEEPALIVE_SECONDS){
+                    serverLog.println(Instant.now() + " : User " + user.getID() + " idle for 60 min");
+                    ServerMessage disconnectMsg = new ServerMessage(ServerMessage.ServerMessageType.IdleTimeout, null);
+                    try {
+                        sendMessageToUser(user, disconnectMsg);
+                    } catch (IOException e) {}
+                    user.deactivate();
+                }
             }
         }
     }

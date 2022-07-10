@@ -142,8 +142,6 @@ public class UserMode {
                 out.close();
                 s.close();
             } catch (IOException | NullPointerException e) {}
-
-            System.err.println("Error: disconnected from server - remote server may have shut down");
         }
     }
 
@@ -159,6 +157,7 @@ public class UserMode {
             }
             catch (IOException | ClassNotFoundException e){
                 baseWindow.close();
+                System.err.println("ERROR: disconnected from server - remote server may have shut down");
                 return;
             }
 
@@ -208,6 +207,11 @@ public class UserMode {
                     readBox.removeExcessLines(true);
                     readBox.setCaretPosition((firstMessageNum - readBox.getFirstMessageNum()) * 3 - 1, 0);
                 }
+            }
+            else if (incomingMsg.getType() == ServerMessage.ServerMessageType.IdleTimeout){
+                baseWindow.close();
+                System.err.println("ERROR: disconnected from server - you were idle for too long");
+                return;
             }
         }
     }

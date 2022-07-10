@@ -32,7 +32,9 @@ public class ChatWindowTextBox extends TextBox{
     public synchronized Result handleKeyStroke(KeyStroke keyStroke) {
         KeyType keyType = keyStroke.getKeyType();
         Result result;
-        TerminalPosition caretPosition;
+        TerminalPosition caretPosition = getCaretPosition();
+        int screenHeight = getSize().getRows();
+        int screenWidth = getSize().getColumns();
 
         switch (keyType){
             //ignore input
@@ -44,8 +46,6 @@ public class ChatWindowTextBox extends TextBox{
                 break;
 
             case ArrowUp:
-                caretPosition = getCaretPosition();
-
                 if (caretPosition.getRow() == 0){
                     Instant currScrollTime = Instant.now();
 
@@ -70,8 +70,6 @@ public class ChatWindowTextBox extends TextBox{
                 break;
 
             case ArrowDown:
-                caretPosition = getCaretPosition();
-
                 if (getCaretPosition().getRow() == getLineCount() - 1){
                     Instant currScrollTime = Instant.now();
 
@@ -92,6 +90,30 @@ public class ChatWindowTextBox extends TextBox{
                 }
 
                 setCaretPosition(caretPosition.getRow() + 3, caretPosition.getColumn());
+                result = Result.HANDLED;
+                break;
+
+            case ArrowLeft:
+                setCaretPosition(caretPosition.getColumn() - screenWidth / 2);
+                result = Result.HANDLED;
+                break;
+
+            case ArrowRight:
+                int maxLength = Integer.MIN_VALUE;
+                int maxLengthLineIndex = -1;
+
+                for (int i = caretPosition.getRow() - screenHeight / 2; i < caretPosition.getRow() + screenHeight / 2; i++){
+                    try {
+                        String line = getLine(i);
+                        if (line.length() > maxLength){
+                            maxLength = line.length();
+                            maxLengthLineIndex = i;
+                        }
+                    }
+                    catch (IndexOutOfBoundsException iobe){}
+                }
+
+                setCaretPosition(maxLengthLineIndex, caretPosition.getColumn() + screenWidth / 2);
                 result = Result.HANDLED;
                 break;
 

@@ -40,7 +40,7 @@ public class MessageEditorTextBox extends TextBox {
                         public void run(){
                             restoreText(message);
                         }
-                    }, App.POPUP_TIMOUT_MILLIS);
+                    }, App.POPUP_TIMEOUT_MILLIS);
                     return Result.HANDLED;
                 }
 
@@ -72,7 +72,7 @@ public class MessageEditorTextBox extends TextBox {
                 public void run(){
                     restoreText(message);
                 }
-            }, App.POPUP_TIMOUT_MILLIS);
+            }, App.POPUP_TIMEOUT_MILLIS);
             return Result.HANDLED;
         }
         
