@@ -13,7 +13,8 @@ public class ServerMessage implements Serializable {
         ID,
         RecentChatChunk,
         ChatChunk,
-        Chat
+        Chat,
+        IdleTimeout
     }
 
     private ServerMessageType type;
@@ -41,6 +42,9 @@ public class ServerMessage implements Serializable {
                     break;
                 case Chat:
                     this.payload = (Quartet<Instant, String, Integer, String>) payload;
+                    break;
+                case IdleTimeout:
+                    payload = new Object();
                     break;
             }
         } catch (ClassCastException cce) {
